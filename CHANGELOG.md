@@ -22,10 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release workflow signs both .deb packages and install.sh
 - Public key bundled with package for offline verification
 - Auto-update downloads from releases (not main branch) with signature verification
+- Signed compatibility.json prevents downgrade attacks
+- Rollback support: installed .deb saved to /var/cache/pve-webauthn-login/
 
 ### Changed
 - Update script rewritten as self-contained check-then-act (no longer calls install.sh)
 - Wrappers now use eval to catch load failures
+- Package dependency loosened to pve-manager >= 9.1.2 (persists across upgrades)
 - API endpoints return appropriate error messages:
   - Auth failures: generic "authentication failure"
   - Config issues: specific guidance (e.g., "WebAuthn is not configured")

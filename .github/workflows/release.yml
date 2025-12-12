@@ -97,6 +97,9 @@ jobs:
           # Sign install.sh for auto-update verification
           gpg --armor --detach-sign install.sh
 
+          # Sign compatibility.json
+          gpg --armor --detach-sign compatibility.json
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,4 +116,5 @@ jobs:
             pve-webauthn-login_${{ inputs.version }}_all.deb.asc \
             install.sh \
             install.sh.asc \
-            compatibility.json
+            compatibility.json \
+            compatibility.json.asc
