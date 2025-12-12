@@ -6,11 +6,10 @@ This document tracks Proxmox component versions that this plugin has been tested
 
 | Component | Version | Date | Notes |
 |-----------|---------|------|-------|
-| Proxmox VE | 8.x | 2025-12-11 | Initial release |
-| pve-access-control | - | 2025-12-11 | Uses verify_ticket, assemble_ticket |
-| pve-manager | - | 2025-12-11 | Patches pveproxy service |
-| pve-http-server | - | 2025-12-11 | Overrides auth_handler |
-| proxmox-widget-toolkit | - | 2025-12-11 | Integrates with LoginWindow |
+| Proxmox VE | 9.1.2 | 2025-12-11 | pve-manager 9.1.2 |
+| libpve-access-control | 9.0.4 | 2025-12-11 | Uses verify_ticket, assemble_ticket |
+| libpve-http-server-perl | 6.0.5 | 2025-12-11 | Overrides auth_handler |
+| proxmox-widget-toolkit | 5.1.2 | 2025-12-11 | Integrates with LoginWindow |
 
 ## Upstream Repositories
 

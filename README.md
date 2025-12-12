@@ -11,7 +11,7 @@ WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hard
 
 ## Requirements
 
-- Proxmox VE 8.0 or later
+- Proxmox VE 9.1.2 (see [COMPATIBILITY.md](COMPATIBILITY.md) for tested versions)
 - WebAuthn must be configured in Datacenter options
 - User must have a WebAuthn credential registered (via Two Factor settings)
 
