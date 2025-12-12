@@ -32,8 +32,8 @@ The script automatically detects your Proxmox version and installs the correct p
 Download the .deb for your Proxmox version from [GitHub Releases](https://github.com/chall37/pve-webauthn-login/releases):
 
 ```bash
-wget https://github.com/chall37/pve-webauthn-login/releases/download/v2025.12.2/pve-webauthn-login_2025.12.2_all.deb
-dpkg -i pve-webauthn-login_2025.12.2_all.deb
+wget https://github.com/chall37/pve-webauthn-login/releases/download/v2025.12.4/pve-webauthn-login_2025.12.4_all.deb
+dpkg -i pve-webauthn-login_2025.12.4_all.deb
 ```
 
 ### Building from source
@@ -73,10 +73,12 @@ The wrappers use `dpkg-divert` to intercept the original binaries. No Proxmox sy
 
 ## Auto-Updates
 
-This package includes a daily systemd timer that automatically checks for and installs updates. The timer runs the install script, which:
-- Detects your current Proxmox version
-- Checks for a compatible release on GitHub
-- Installs updates if available
+This package includes a daily systemd timer that automatically checks for and installs updates. The update process:
+- Validates the release tag format
+- Checks compatibility with your Proxmox version
+- Downloads the .deb package and GPG signature from releases
+- Verifies the GPG signature matches the expected fingerprint
+- Only installs after all checks pass
 
 To check timer status:
 ```bash
@@ -136,9 +138,10 @@ apt remove pve-webauthn-login
 
 ### Package Integrity
 - All releases are GPG-signed
-- The install script verifies signatures before installation
+- Both install.sh and the auto-update script verify signatures before installation
+- GPG key fingerprint is hardcoded to prevent key substitution attacks
 - Public key is distributed in the repository ([keys/pve-webauthn-login.asc](keys/pve-webauthn-login.asc))
-- Uses Trust-On-First-Use (TOFU) model: once installed, future updates must be signed by the same key
+- Auto-updates download from releases (not main branch) with full signature verification
 
 ## License
 
