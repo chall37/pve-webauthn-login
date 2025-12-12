@@ -1,7 +1,7 @@
 # WebAuthn Passwordless Login for Proxmox
 
 ## Goal
-Enable TouchID/WebAuthn as a standalone authentication method for Proxmox, bypassing password entry entirely.
+Enable passkeys/WebAuthn as a standalone authentication method for Proxmox, bypassing password entry entirely.
 
 ## Project Structure
 
@@ -38,7 +38,7 @@ Create a self-contained Perl module that:
 ```
 ┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
 │  Login Form     │────▶│ /webauthn-login/     │────▶│ Issue Ticket    │
-│  (TouchID btn)  │     │ challenge + login    │     │ (like OpenID)   │
+│  (Passkey btn)  │     │ challenge + login    │     │ (like OpenID)   │
 └─────────────────┘     └──────────────────────┘     └─────────────────┘
 ```
 
@@ -60,7 +60,7 @@ Environment="PERL5OPT=-MPVE::WebAuthnLogin"
 ```
 
 ### 3. `/usr/local/share/pve-webauthn-login/webauthn-login.js`
-Frontend JavaScript that adds "Login with TouchID" button. Served via pveproxy pages config.
+Frontend JavaScript that adds "Login with Passkey" button. Served via pveproxy pages config.
 
 ---
 
@@ -330,8 +330,8 @@ This script runs after pvemanagerlib.js loads and patches the LoginWindow:
 
                     btnContainer.add({
                         xtype: 'button',
-                        text: gettext('Login with TouchID'),
-                        iconCls: 'fa fa-hand-pointer-o',
+                        text: gettext('Login with Passkey'),
+                        iconCls: 'fa fa-key',
                         margin: '0 0 0 10',
                         handler: 'onWebAuthnLogin'
                     });
@@ -387,7 +387,7 @@ This script runs after pvemanagerlib.js loads and patches the LoginWindow:
                             }
                         }
 
-                        // Step 3: Invoke WebAuthn (TouchID prompt)
+                        // Step 3: Invoke WebAuthn (Passkey prompt)
                         let assertion = await navigator.credentials.get({ publicKey });
 
                         // Step 4: Format response for server
@@ -535,7 +535,7 @@ Package: pve-webauthn-login
 Architecture: all
 Depends: ${misc:Depends}, proxmox-ve (>= 8.0)
 Description: WebAuthn passwordless login for Proxmox VE
- Enables TouchID and other WebAuthn authenticators as a standalone
+ Enables passkeys and other WebAuthn authenticators as a standalone
  login method for Proxmox VE, bypassing password entry.
 ```
 
