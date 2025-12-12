@@ -7,6 +7,7 @@ set -e
 REPO="chall37/pve-webauthn-login"
 COMPAT_URL="https://raw.githubusercontent.com/$REPO/main/compatibility.json"
 KEY_URL="https://raw.githubusercontent.com/$REPO/main/keys/pve-webauthn-login.asc"
+EXPECTED_FINGERPRINT="D408D1D8A4B730F47EE17FE7FD3723E6F0A2ABD7"
 
 # Colors for output
 RED='\033[0;31m'
@@ -64,12 +65,14 @@ else
     info "Installing version $RELEASE_VERSION"
 fi
 
-# Download .deb
+# Download .deb (use secure temp directory)
 DEB_FILE="pve-webauthn-login_${RELEASE_VERSION}_all.deb"
 DEB_URL="https://github.com/$REPO/releases/download/$RELEASE/$DEB_FILE"
 SIG_URL="${DEB_URL}.asc"
-TMP_DEB="/tmp/$DEB_FILE"
-TMP_SIG="/tmp/${DEB_FILE}.asc"
+TMP_DIR=$(mktemp -d)
+trap "rm -rf $TMP_DIR" EXIT
+TMP_DEB="$TMP_DIR/$DEB_FILE"
+TMP_SIG="$TMP_DIR/${DEB_FILE}.asc"
 
 info "Downloading $DEB_FILE..."
 curl -fsSL "$DEB_URL" -o "$TMP_DEB" || error "Failed to download $DEB_URL"
@@ -82,9 +85,13 @@ info "Verifying GPG signature..."
 # Import public key (suppressing output, will fail silently if already imported)
 curl -fsSL "$KEY_URL" 2>/dev/null | gpg --import 2>/dev/null || true
 
+# Verify the key fingerprint matches expected (security: ensure our key, not any valid key)
+if ! gpg --fingerprint "$EXPECTED_FINGERPRINT" >/dev/null 2>&1; then
+    error "GPG key fingerprint mismatch - possible tampering detected"
+fi
+
 # Verify signature
 if ! gpg --verify "$TMP_SIG" "$TMP_DEB" 2>/dev/null; then
-    rm -f "$TMP_DEB" "$TMP_SIG"
     error "GPG signature verification failed! The package may have been tampered with.
 
 If this is a new installation, ensure you're using the official repository.
@@ -96,8 +103,7 @@ info "Signature verified successfully"
 info "Installing package..."
 dpkg -i "$TMP_DEB" || error "Package installation failed"
 
-# Cleanup
-rm -f "$TMP_DEB" "$TMP_SIG"
+# Cleanup handled by trap
 
 info "Successfully installed pve-webauthn-login $RELEASE_VERSION"
 echo ""

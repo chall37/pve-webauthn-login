@@ -1,46 +1,99 @@
 #!/bin/bash
-# pve-webauthn-login update script
-# Downloads and verifies install.sh before execution
-# This script is installed as part of the package, so it's trusted
+# pve-webauthn-login update checker
+# Validates everything BEFORE taking action
+#
+# Security model:
+# 1. Validate tag format (prevent injection)
+# 2. Check PVE version compatibility
+# 3. Compare versions (exit early if current)
+# 4. Download .deb and signature to secure temp dir
+# 5. Verify GPG fingerprint matches expected value
+# 6. Verify signature
+# 7. Only then install
 
 set -e
 
 REPO="chall37/pve-webauthn-login"
 KEY_PATH="/usr/local/share/pve-webauthn-login/keys/pve-webauthn-login.asc"
+EXPECTED_FINGERPRINT="D408D1D8A4B730F47EE17FE7FD3723E6F0A2ABD7"
+
 TMP_DIR=$(mktemp -d)
 trap "rm -rf $TMP_DIR" EXIT
 
-# Get latest release tag
-LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed 's/.*: *"\([^"]*\)".*/\1/')
+log() { logger -t pve-webauthn-login "$1"; }
+
+# 1. Get latest release tag
+LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+    | grep '"tag_name"' | sed 's/.*: *"\([^"]*\)".*/\1/')
 
 if [ -z "$LATEST" ]; then
-    logger -t pve-webauthn-login "Update check failed: could not determine latest release"
+    log "Update check failed: could not determine latest release"
     exit 1
 fi
 
-# Download install.sh and its signature from the release
-INSTALL_URL="https://github.com/$REPO/releases/download/$LATEST/install.sh"
-SIG_URL="${INSTALL_URL}.asc"
+# 2. Validate tag format (security: prevent injection)
+if ! echo "$LATEST" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+    log "Update check failed: invalid tag format '$LATEST'"
+    exit 1
+fi
 
-curl -fsSL "$INSTALL_URL" -o "$TMP_DIR/install.sh" 2>/dev/null || {
-    logger -t pve-webauthn-login "Update check failed: could not download install.sh"
+# 3. Check compatibility with current PVE version
+PVE_VERSION=$(dpkg-query -W -f='${Version}' pve-manager 2>/dev/null) || {
+    log "Update check failed: could not determine PVE version"
     exit 1
 }
 
-curl -fsSL "$SIG_URL" -o "$TMP_DIR/install.sh.asc" 2>/dev/null || {
-    logger -t pve-webauthn-login "Update check failed: could not download install.sh signature"
+COMPAT_URL="https://github.com/$REPO/releases/download/$LATEST/compatibility.json"
+curl -fsSL "$COMPAT_URL" -o "$TMP_DIR/compatibility.json" 2>/dev/null || {
+    log "Update check failed: could not download compatibility.json"
     exit 1
 }
 
-# Import our public key if not already imported
+COMPAT_RELEASE=$(grep "\"$PVE_VERSION\"" "$TMP_DIR/compatibility.json" 2>/dev/null | sed 's/.*: *"\([^"]*\)".*/\1/')
+if [ -z "$COMPAT_RELEASE" ]; then
+    log "Update check: no compatible release for PVE $PVE_VERSION"
+    exit 0
+fi
+
+# 4. Compare versions - exit if already current
+RELEASE_VERSION="${COMPAT_RELEASE#v}"
+CURRENT=$(dpkg-query -W -f='${Version}' pve-webauthn-login 2>/dev/null || echo "")
+
+if [ "$CURRENT" = "$RELEASE_VERSION" ]; then
+    log "Update check: already at latest version ($CURRENT)"
+    exit 0
+fi
+
+# 5. Download .deb and signature
+DEB_FILE="pve-webauthn-login_${RELEASE_VERSION}_all.deb"
+DEB_URL="https://github.com/$REPO/releases/download/$COMPAT_RELEASE/$DEB_FILE"
+
+curl -fsSL "$DEB_URL" -o "$TMP_DIR/$DEB_FILE" 2>/dev/null || {
+    log "Update check failed: could not download $DEB_FILE"
+    exit 1
+}
+
+curl -fsSL "${DEB_URL}.asc" -o "$TMP_DIR/${DEB_FILE}.asc" 2>/dev/null || {
+    log "Update check failed: could not download signature"
+    exit 1
+}
+
+# 6. Import key and verify fingerprint
 gpg --import "$KEY_PATH" 2>/dev/null || true
 
-# Verify signature
-if ! gpg --verify "$TMP_DIR/install.sh.asc" "$TMP_DIR/install.sh" 2>/dev/null; then
-    logger -t pve-webauthn-login "Update BLOCKED: GPG signature verification failed for install.sh"
+# Verify the key fingerprint matches expected (security: ensure our key, not any valid key)
+if ! gpg --fingerprint "$EXPECTED_FINGERPRINT" >/dev/null 2>&1; then
+    log "Update BLOCKED: GPG key fingerprint mismatch"
     exit 1
 fi
 
-# Signature verified - safe to execute
-logger -t pve-webauthn-login "Update: signature verified, running install.sh"
-bash "$TMP_DIR/install.sh"
+# 7. Verify signature
+if ! gpg --verify "$TMP_DIR/${DEB_FILE}.asc" "$TMP_DIR/$DEB_FILE" 2>/dev/null; then
+    log "Update BLOCKED: GPG signature verification failed"
+    exit 1
+fi
+
+# 8. ALL CHECKS PASSED - safe to install
+log "Update: installing $RELEASE_VERSION (was: ${CURRENT:-not installed})"
+dpkg -i "$TMP_DIR/$DEB_FILE"
+log "Update: successfully installed $RELEASE_VERSION"

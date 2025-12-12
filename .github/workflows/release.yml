@@ -105,11 +105,12 @@ jobs:
           # Write notes to file to avoid shell escaping issues
           echo "$RELEASE_NOTES" > release-notes.md
 
-          # Create release with signed artifacts
+          # Create release with signed artifacts and compatibility.json
           gh release create "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --notes-file release-notes.md \
             pve-webauthn-login_${{ inputs.version }}_all.deb \
             pve-webauthn-login_${{ inputs.version }}_all.deb.asc \
             install.sh \
-            install.sh.asc
+            install.sh.asc \
+            compatibility.json
