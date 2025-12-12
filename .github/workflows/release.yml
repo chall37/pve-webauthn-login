@@ -80,15 +80,32 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
 
-      - name: Create GitHub Release
+      - name: Import GPG key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | gpg --import --batch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Sign release artifacts
         run: |
           # Move .deb to current directory
           mv ../pve-webauthn-login_${{ inputs.version }}_all.deb .
 
-          # Create release with notes from changelog
+          # Sign the .deb package
+          gpg --armor --detach-sign pve-webauthn-login_${{ inputs.version }}_all.deb
+
+          # Sign install.sh for auto-update verification
+          gpg --armor --detach-sign install.sh
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create release with signed artifacts
           gh release create "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --notes "${{ steps.changelog.outputs.notes }}" \
-            pve-webauthn-login_${{ inputs.version }}_all.deb
+            pve-webauthn-login_${{ inputs.version }}_all.deb \
+            pve-webauthn-login_${{ inputs.version }}_all.deb.asc \
+            install.sh \
+            install.sh.asc

@@ -14,22 +14,27 @@ use PVE::API2::AccessControl;
 # Path to our custom JS file
 my $webauthn_js_path = '/usr/local/share/pve-webauthn-login/webauthn-login.js';
 
+# Track which parts loaded successfully
+our $auth_handler_patched = 0;
+our $api_endpoints_registered = 0;
+
 #############################################
 # Part A: Monkey-patch HTTPServer for auth bypass
 # This works for BOTH pveproxy AND pvedaemon
 #############################################
 
 BEGIN {
-    # Load HTTPServer FIRST before any service loads it
-    require PVE::HTTPServer;
+    eval {
+        # Load HTTPServer FIRST before any service loads it
+        require PVE::HTTPServer;
 
-    # Now override auth_handler BEFORE services use it
-    my $original_auth_handler = \&PVE::HTTPServer::auth_handler;
+        # Now override auth_handler BEFORE services use it
+        my $original_auth_handler = \&PVE::HTTPServer::auth_handler;
 
-    no warnings 'redefine';
+        no warnings 'redefine';
 
-    # Override auth_handler to allow our WebAuthn endpoints without authentication
-    *PVE::HTTPServer::auth_handler = sub {
+        # Override auth_handler to allow our WebAuthn endpoints without authentication
+        *PVE::HTTPServer::auth_handler = sub {
         my ($self, $method, $rel_uri, $ticket, $token, $api_token, $peer_host) = @_;
 
         my $rpcenv = $self->{rpcenv};
@@ -101,7 +106,12 @@ BEGIN {
         };
     };
 
-    use warnings 'redefine';
+        use warnings 'redefine';
+        $PVE::WebAuthnLogin::auth_handler_patched = 1;
+    };
+    if ($@) {
+        warn "pve-webauthn-login: Failed to patch auth handler: $@";
+    }
 }
 
 #############################################
@@ -109,56 +119,66 @@ BEGIN {
 # (only applies when loaded by pveproxy)
 #############################################
 
+our $pveproxy_patched = 0;
+
 sub patch_pveproxy {
-    require PVE::Service::pveproxy;
+    eval {
+        require PVE::Service::pveproxy;
 
-    # Store original functions for pveproxy
-    my $original_init = \&PVE::Service::pveproxy::init;
-    my $original_get_index = \&PVE::Service::pveproxy::get_index;
+        # Store original functions for pveproxy
+        my $original_init = \&PVE::Service::pveproxy::init;
+        my $original_get_index = \&PVE::Service::pveproxy::get_index;
 
-    no warnings 'redefine';
+        no warnings 'redefine';
 
-    # Override init to add our JS file to pages config
-    *PVE::Service::pveproxy::init = sub {
-        my ($self) = @_;
-        $original_init->($self);
+        # Override init to add our JS file to pages config
+        *PVE::Service::pveproxy::init = sub {
+            my ($self) = @_;
+            $original_init->($self);
 
-        # Add our custom JS file to pages (served without auth)
-        if (-f $webauthn_js_path) {
-            $self->{server_config}->{pages}->{'/webauthn-login.js'} = {
-                file => $webauthn_js_path,
-            };
-        }
-    };
-
-    # Override get_index to inject script tag
-    *PVE::Service::pveproxy::get_index = sub {
-        my $resp = $original_get_index->(@_);
-
-        if (-f $webauthn_js_path) {
-            my $content = $resp->content;
-            my $script_tag = '<script type="text/javascript" src="/webauthn-login.js"></script>';
-
-            # Inject BEFORE the inline Ext.onReady script that creates PVE.StdWorkspace
-            # This ensures our override is in place before the login window is created
-            if ($content =~ s{(pvemanagerlib\.js[^>]*></script>)}{$1\n    $script_tag}s) {
-                # Successfully injected after pvemanagerlib.js
-            } else {
-                # Fallback: inject before </head>
-                $content =~ s{</head>}{$script_tag\n</head>};
+            # Add our custom JS file to pages (served without auth)
+            if (-f $webauthn_js_path) {
+                $self->{server_config}->{pages}->{'/webauthn-login.js'} = {
+                    file => $webauthn_js_path,
+                };
             }
-            $resp->content($content);
-        }
+        };
 
-        return $resp;
+        # Override get_index to inject script tag
+        *PVE::Service::pveproxy::get_index = sub {
+            my $resp = $original_get_index->(@_);
+
+            if (-f $webauthn_js_path) {
+                my $content = $resp->content;
+                my $script_tag = '<script type="text/javascript" src="/webauthn-login.js"></script>';
+
+                # Inject BEFORE the inline Ext.onReady script that creates PVE.StdWorkspace
+                # This ensures our override is in place before the login window is created
+                if ($content =~ s{(pvemanagerlib\.js[^>]*></script>)}{$1\n    $script_tag}s) {
+                    # Successfully injected after pvemanagerlib.js
+                } else {
+                    # Fallback: inject before </head>
+                    $content =~ s{</head>}{$script_tag\n</head>};
+                }
+                $resp->content($content);
+            }
+
+            return $resp;
+        };
+
+        use warnings 'redefine';
+        $pveproxy_patched = 1;
     };
-
-    use warnings 'redefine';
+    if ($@) {
+        warn "pve-webauthn-login: Failed to patch pveproxy: $@";
+    }
 }
 
 #############################################
 # Part C: Register API endpoints
 #############################################
+
+eval {
 
 # POST /api2/json/access/webauthn-challenge
 PVE::API2::AccessControl->register_method({
@@ -190,11 +210,20 @@ PVE::API2::AccessControl->register_method({
         my ($param) = @_;
 
         my $rpcenv = PVE::RPCEnvironment::get();
-        my $username = PVE::AccessControl::lookup_username($param->{username});
         my $clientip = $rpcenv->get_client_ip() || '';
 
+        # Lookup username - this can fail if the function signature changed
+        my $username;
         eval {
-            # Verify user exists and is enabled
+            $username = PVE::AccessControl::lookup_username($param->{username});
+        };
+        if ($@) {
+            syslog('err', "pve-webauthn-login: lookup_username failed: $@");
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+        }
+
+        # Verify user exists and is enabled (auth failure - generic message)
+        eval {
             $rpcenv->check_user_enabled($username);
         };
         if (my $err = $@) {
@@ -202,30 +231,58 @@ PVE::API2::AccessControl->register_method({
             die PVE::Exception->new("authentication failure\n", code => 401);
         }
 
-        # Get user's TFA config
-        my $tfa_cfg = cfs_read_file('priv/tfa.cfg');
-        die PVE::Exception->new("authentication failure\n", code => 401) if !$tfa_cfg;
+        # Get user's TFA config (our failure if this fails unexpectedly)
+        my $tfa_cfg;
+        eval {
+            $tfa_cfg = cfs_read_file('priv/tfa.cfg');
+        };
+        if ($@ || !$tfa_cfg) {
+            syslog('err', "pve-webauthn-login: Failed to read TFA config: " . ($@ || 'empty'));
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+        }
 
-        # Configure WebAuthn settings
-        PVE::AccessControl::configure_u2f_and_wa($tfa_cfg);
+        # Configure WebAuthn settings (config failure - specific message)
+        eval {
+            PVE::AccessControl::configure_u2f_and_wa($tfa_cfg);
+        };
+        if ($@) {
+            syslog('err', "pve-webauthn-login: WebAuthn configuration error: $@");
+            die PVE::Exception->new("WebAuthn is not configured. Check Datacenter -> Options -> WebAuthn Settings.\n", code => 500);
+        }
 
-        # Generate WebAuthn challenge
-        my $challenge = $tfa_cfg->authentication_challenge($username);
+        # Generate WebAuthn challenge (auth failure if user has no credentials)
+        my $challenge;
+        eval {
+            $challenge = $tfa_cfg->authentication_challenge($username);
+        };
+        if ($@) {
+            syslog('err', "pve-webauthn-login: Challenge generation error: $@");
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+        }
         if (!$challenge) {
             syslog('err', "webauthn challenge failure; rhost=$clientip user=$username msg=no credentials");
             die PVE::Exception->new("authentication failure\n", code => 401);
         }
 
-        # Check if challenge contains webauthn
-        my $challenge_data = decode_json($challenge);
-        if (!$challenge_data->{webauthn}) {
-            syslog('err', "webauthn challenge failure; rhost=$clientip user=$username msg=no webauthn");
+        # Check if challenge contains webauthn (auth failure - user may only have TOTP)
+        my $challenge_data;
+        eval {
+            $challenge_data = decode_json($challenge);
+        };
+        if ($@ || !$challenge_data->{webauthn}) {
+            syslog('err', "webauthn challenge failure; rhost=$clientip user=$username msg=no webauthn credentials");
             die PVE::Exception->new("authentication failure\n", code => 401);
         }
 
         # Create a signed ticket containing the challenge
-        # Use !tfa! prefix so verify_ticket returns the data when called with AAD
-        my $ticket = PVE::AccessControl::assemble_ticket("!tfa!waLogin!$challenge", $username);
+        my $ticket;
+        eval {
+            $ticket = PVE::AccessControl::assemble_ticket("!tfa!waLogin!$challenge", $username);
+        };
+        if ($@) {
+            syslog('err', "pve-webauthn-login: Ticket assembly failed: $@");
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+        }
 
         return {
             challenge => $challenge,
@@ -274,15 +331,30 @@ PVE::API2::AccessControl->register_method({
         my ($param) = @_;
 
         my $rpcenv = PVE::RPCEnvironment::get();
-        my $username = PVE::AccessControl::lookup_username($param->{username});
         my $clientip = $rpcenv->get_client_ip() || '';
 
-        my $res;
+        # Lookup username
+        my $username;
         eval {
-            # Verify user is enabled
-            $rpcenv->check_user_enabled($username);
+            $username = PVE::AccessControl::lookup_username($param->{username});
+        };
+        if ($@) {
+            syslog('err', "pve-webauthn-login: lookup_username failed: $@");
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+        }
 
-            # Verify the challenge ticket
+        # Verify user is enabled (auth failure - generic)
+        eval {
+            $rpcenv->check_user_enabled($username);
+        };
+        if ($@) {
+            syslog('err', "webauthn login failure; rhost=$clientip user=$username msg=$@");
+            die PVE::Exception->new("authentication failure\n", code => 401);
+        }
+
+        # Verify the challenge ticket (auth failure - could be expired or tampered)
+        my $challenge;
+        eval {
             my ($ticket_data, $ticket_age) = PVE::AccessControl::verify_ticket(
                 $param->{'challenge-ticket'}, 0, $username
             );
@@ -290,26 +362,52 @@ PVE::API2::AccessControl->register_method({
             die "invalid challenge ticket\n" if !defined($ticket_data);
             # verify_ticket strips !tfa! prefix, so we expect waLogin! prefix now
             die "invalid challenge ticket\n" unless $ticket_data =~ s/^waLogin!//;
-            my $challenge = $ticket_data;
+            $challenge = $ticket_data;
+        };
+        if ($@) {
+            syslog('err', "webauthn login failure; rhost=$clientip user=$username msg=$@");
+            die PVE::Exception->new("authentication failure\n", code => 401);
+        }
 
-            # Get TFA config and configure WebAuthn
-            my $tfa_cfg = cfs_read_file('priv/tfa.cfg');
+        # Get TFA config
+        my $tfa_cfg;
+        eval {
+            $tfa_cfg = cfs_read_file('priv/tfa.cfg');
             PVE::AccessControl::configure_u2f_and_wa($tfa_cfg);
+        };
+        if ($@) {
+            syslog('err', "pve-webauthn-login: TFA config error during login: $@");
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+        }
 
-            # Verify the WebAuthn response
+        # Verify the WebAuthn response (auth failure if verification fails)
+        my $result;
+        eval {
             my $tfa_response = "webauthn:" . $param->{response};
-            my $result = $tfa_cfg->authentication_verify2(
+            $result = $tfa_cfg->authentication_verify2(
                 $username, $challenge, $tfa_response
             );
+        };
+        if ($@ || !$result->{result}) {
+            my $err = $@ || "verification failed";
+            syslog('err', "webauthn login failure; rhost=$clientip user=$username msg=$err");
+            die PVE::Exception->new("authentication failure\n", code => 401);
+        }
 
-            die "WebAuthn verification failed\n" unless $result->{result};
-
-            # Save TFA state if needed (e.g., counter update)
-            if ($result->{'needs-saving'}) {
+        # Save TFA state if needed (e.g., counter update) - non-fatal if fails
+        if ($result->{'needs-saving'}) {
+            eval {
                 cfs_write_file('priv/tfa.cfg', $tfa_cfg);
+            };
+            if ($@) {
+                syslog('warning', "pve-webauthn-login: Failed to save TFA state: $@");
+                # Continue anyway - login succeeded
             }
+        }
 
-            # Issue the authentication ticket
+        # Issue the authentication ticket
+        my $res;
+        eval {
             my $ticket = PVE::AccessControl::assemble_ticket($username);
             my $csrftoken = PVE::AccessControl::assemble_csrf_prevention_token($username);
             my $cap = $rpcenv->compute_api_permission($username);
@@ -320,18 +418,23 @@ PVE::API2::AccessControl->register_method({
                 CSRFPreventionToken => $csrftoken,
                 cap => $cap,
             };
-
-            PVE::Cluster::log_msg('info', 'root@pam',
-                "successful webauthn login for user '$username'");
         };
-
-        if (my $err = $@) {
-            syslog('err', "webauthn login failure; rhost=$clientip user=$username msg=$err");
-            die PVE::Exception->new("authentication failure\n", code => 401);
+        if ($@) {
+            syslog('err', "pve-webauthn-login: Ticket/token generation failed: $@");
+            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
         }
+
+        PVE::Cluster::log_msg('info', 'root@pam',
+            "successful webauthn login for user '$username'");
 
         return $res;
     },
 });
+
+$api_endpoints_registered = 1;
+};
+if ($@) {
+    warn "pve-webauthn-login: Failed to register API endpoints: $@";
+}
 
 1;

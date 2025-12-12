@@ -16,6 +16,16 @@ override_dh_auto_install:
 		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/pveproxy-wrapper
 	install -D -m 755 bin/pvedaemon-wrapper \
 		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/pvedaemon-wrapper
+	# Install update script and GPG public key
+	install -D -m 755 bin/update \
+		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/update
+	install -D -m 644 keys/pve-webauthn-login.asc \
+		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/keys/pve-webauthn-login.asc
+	# Install systemd timer and service for auto-updates
+	install -D -m 644 systemd/pve-webauthn-login-update.timer \
+		debian/pve-webauthn-login/lib/systemd/system/pve-webauthn-login-update.timer
+	install -D -m 644 systemd/pve-webauthn-login-update.service \
+		debian/pve-webauthn-login/lib/systemd/system/pve-webauthn-login-update.service
 
 override_dh_usrlocal:
 	# Allow files in /usr/local - this is intentional for this package

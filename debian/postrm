@@ -11,6 +11,10 @@ PVEDAEMON_DIVERTED=/usr/bin/pvedaemon.pve-webauthn-login-orig
 
 case "$1" in
     remove|purge)
+        # Stop and disable the auto-update timer
+        systemctl stop pve-webauthn-login-update.timer || true
+        systemctl disable pve-webauthn-login-update.timer || true
+
         # Remove the pveproxy symlink and diversion
         if [ -L "$PVEPROXY_ORIGINAL" ]; then
             rm -f "$PVEPROXY_ORIGINAL"

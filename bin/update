@@ -1,0 +1,46 @@
+#!/bin/bash
+# pve-webauthn-login update script
+# Downloads and verifies install.sh before execution
+# This script is installed as part of the package, so it's trusted
+
+set -e
+
+REPO="chall37/pve-webauthn-login"
+KEY_PATH="/usr/local/share/pve-webauthn-login/keys/pve-webauthn-login.asc"
+TMP_DIR=$(mktemp -d)
+trap "rm -rf $TMP_DIR" EXIT
+
+# Get latest release tag
+LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | grep '"tag_name"' | sed 's/.*: *"\([^"]*\)".*/\1/')
+
+if [ -z "$LATEST" ]; then
+    logger -t pve-webauthn-login "Update check failed: could not determine latest release"
+    exit 1
+fi
+
+# Download install.sh and its signature from the release
+INSTALL_URL="https://github.com/$REPO/releases/download/$LATEST/install.sh"
+SIG_URL="${INSTALL_URL}.asc"
+
+curl -fsSL "$INSTALL_URL" -o "$TMP_DIR/install.sh" 2>/dev/null || {
+    logger -t pve-webauthn-login "Update check failed: could not download install.sh"
+    exit 1
+}
+
+curl -fsSL "$SIG_URL" -o "$TMP_DIR/install.sh.asc" 2>/dev/null || {
+    logger -t pve-webauthn-login "Update check failed: could not download install.sh signature"
+    exit 1
+}
+
+# Import our public key if not already imported
+gpg --import "$KEY_PATH" 2>/dev/null || true
+
+# Verify signature
+if ! gpg --verify "$TMP_DIR/install.sh.asc" "$TMP_DIR/install.sh" 2>/dev/null; then
+    logger -t pve-webauthn-login "Update BLOCKED: GPG signature verification failed for install.sh"
+    exit 1
+fi
+
+# Signature verified - safe to execute
+logger -t pve-webauthn-login "Update: signature verified, running install.sh"
+bash "$TMP_DIR/install.sh"
