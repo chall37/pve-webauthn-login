@@ -157,7 +157,7 @@ sub patch_pveproxy {
 }
 
 #############################################
-# Part B: Register API endpoints
+# Part C: Register API endpoints
 #############################################
 
 # POST /api2/json/access/webauthn-challenge

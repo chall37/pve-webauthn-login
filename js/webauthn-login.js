@@ -1,13 +1,13 @@
 // WebAuthn Passwordless Login for Proxmox VE
 // Adds a "Login with Passkey" button to the Proxmox login window
 
-(function() {
+(function init() {
     'use strict';
 
     // Wait for Ext to be ready
     if (typeof Ext === 'undefined') {
         console.log('WebAuthn Login: Ext not found, retrying...');
-        setTimeout(arguments.callee, 100);
+        setTimeout(init, 100);
         return;
     }
 

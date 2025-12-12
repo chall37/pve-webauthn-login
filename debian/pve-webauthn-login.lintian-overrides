@@ -1,0 +1,8 @@
+# We intentionally install to /usr/local to survive Proxmox updates
+# This is a core design decision documented in the package description
+pve-webauthn-login: dir-in-usr-local [usr/local/share/*]
+pve-webauthn-login: file-in-usr-local [usr/local/share/*]
+pve-webauthn-login: file-in-unusual-dir [usr/local/share/*]
+
+# We restart PVE services directly (not our own units) after install/remove
+pve-webauthn-login: maintainer-script-calls-systemctl
