@@ -10,6 +10,9 @@ delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
 use strict;
 use warnings;
 
+# Add our version-agnostic lib path to @INC
+use lib '/usr/local/share/pve-webauthn-login/lib';
+
 # Load our WebAuthn login module BEFORE anything else
 use PVE::WebAuthnLogin;
 
