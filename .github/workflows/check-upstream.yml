@@ -1,0 +1,142 @@
+name: Check Upstream Updates
+
+on:
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check upstream repositories for updates
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Repositories to monitor
+          REPOS=(
+            "proxmox/pve-access-control"
+            "proxmox/pve-manager"
+            "proxmox/pve-http-server"
+            "proxmox/proxmox-widget-toolkit"
+          )
+
+          # File to store last known commits
+          STATE_FILE=".github/upstream-state.json"
+
+          # Initialize state if it doesn't exist
+          if [ ! -f "$STATE_FILE" ]; then
+            echo '{}' > "$STATE_FILE"
+          fi
+
+          UPDATES=""
+          NEW_STATE="{}"
+
+          for repo in "${REPOS[@]}"; do
+            echo "Checking $repo..."
+
+            # Get latest commit on default branch
+            LATEST=$(gh api "repos/$repo/commits?per_page=1" --jq '.[0].sha' 2>/dev/null || echo "")
+            LATEST_DATE=$(gh api "repos/$repo/commits?per_page=1" --jq '.[0].commit.committer.date' 2>/dev/null || echo "")
+            LATEST_MSG=$(gh api "repos/$repo/commits?per_page=1" --jq '.[0].commit.message' 2>/dev/null | head -1 || echo "")
+
+            if [ -z "$LATEST" ]; then
+              echo "  Failed to fetch $repo"
+              continue
+            fi
+
+            # Get previously known commit
+            PREVIOUS=$(cat "$STATE_FILE" | jq -r ".\"$repo\" // empty")
+
+            echo "  Latest: ${LATEST:0:7}"
+            echo "  Previous: ${PREVIOUS:0:7}"
+
+            # Update state
+            NEW_STATE=$(echo "$NEW_STATE" | jq --arg repo "$repo" --arg sha "$LATEST" '. + {($repo): $sha}')
+
+            # Check if changed
+            if [ -n "$PREVIOUS" ] && [ "$LATEST" != "$PREVIOUS" ]; then
+              echo "  -> UPDATED!"
+              UPDATES="${UPDATES}\n- **$repo**: [\`${PREVIOUS:0:7}\` → \`${LATEST:0:7}\`](https://github.com/$repo/compare/${PREVIOUS}...${LATEST})\n  - Latest: $LATEST_MSG\n  - Date: $LATEST_DATE"
+            elif [ -z "$PREVIOUS" ]; then
+              echo "  -> New tracking (no previous state)"
+            else
+              echo "  -> No change"
+            fi
+          done
+
+          # Save new state
+          echo "$NEW_STATE" > "$STATE_FILE"
+
+          # Output results
+          if [ -n "$UPDATES" ]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            # Use a delimiter for multiline output
+            EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+            echo "updates<<$EOF" >> $GITHUB_OUTPUT
+            echo -e "$UPDATES" >> $GITHUB_OUTPUT
+            echo "$EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit state file
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -f ".github/upstream-state.json" ]; then
+            git add .github/upstream-state.json
+            git diff --staged --quiet || git commit -m "Update upstream state tracking"
+            git push || echo "Nothing to push"
+          fi
+
+      - name: Create issue for updates
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if there's already an open issue
+          EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
+
+          BODY="## Upstream Proxmox Updates Detected
+
+          The following upstream repositories have new commits since last check:
+
+          ${{ steps.check.outputs.updates }}
+
+          ### Action Required
+
+          1. Review the changes in the linked comparisons
+          2. Check if any changes affect:
+             - \`PVE::AccessControl\` (ticket/auth functions)
+             - \`PVE::HTTPServer::auth_handler\`
+             - \`PVE::Service::pveproxy\`
+             - \`PVE.window.LoginWindow\` (ExtJS)
+          3. Test the plugin against updated Proxmox if needed
+          4. Update COMPATIBILITY.md with test results
+          5. Close this issue when validated
+
+          ---
+          *This issue was automatically created by the upstream monitoring workflow.*"
+
+          if [ -n "$EXISTING" ]; then
+            echo "Updating existing issue #$EXISTING"
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            echo "Creating new issue"
+            gh issue create \
+              --title "Upstream Proxmox updates detected - validation required" \
+              --body "$BODY" \
+              --label "upstream-update"
+          fi
