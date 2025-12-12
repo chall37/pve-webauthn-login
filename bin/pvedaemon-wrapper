@@ -2,6 +2,7 @@
 
 # pvedaemon wrapper for pve-webauthn-login
 # This wrapper loads the WebAuthnLogin module before executing the real pvedaemon
+# If loading fails, the service runs vanilla (without passkey login)
 
 $ENV{'PATH'} = '/sbin:/bin:/usr/sbin:/usr/bin';
 
@@ -10,14 +11,23 @@ delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
 use strict;
 use warnings;
 
+# Load syslog early for error reporting
+use PVE::SafeSyslog;
+
 # Add our version-agnostic lib path to @INC
 use lib '/usr/local/share/pve-webauthn-login/lib';
 
-# Load our WebAuthn login module BEFORE anything else
-use PVE::WebAuthnLogin;
+# Try to load our WebAuthn login module - fail gracefully if it doesn't work
+eval {
+    require PVE::WebAuthnLogin;
+    # pvedaemon doesn't need patch_pveproxy() - just the auth handler patch from BEGIN
+};
+if ($@) {
+    syslog('err', "pve-webauthn-login: Failed to load module: $@");
+    # Continue to run vanilla pvedaemon
+}
 
 # Now load and run the real pvedaemon
-use PVE::SafeSyslog;
 use PVE::Service::pvedaemon;
 
 $SIG{'__WARN__'} = sub {

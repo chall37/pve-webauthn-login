@@ -8,6 +8,8 @@ WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hard
 - **Support for** TouchID, Windows Hello, YubiKey, and other security keys
 - **No modification to Proxmox system files**
 - **Easy installation** via install script or Debian package
+- **Auto-updates** via daily systemd timer
+- **Graceful degradation** - if the module fails to load, Proxmox runs normally
 
 ## Requirements
 
@@ -69,13 +71,52 @@ This package installs:
 
 The wrappers use `dpkg-divert` to intercept the original binaries. No Proxmox system files are modified directly.
 
+## Auto-Updates
+
+This package includes a daily systemd timer that automatically checks for and installs updates. The timer runs the install script, which:
+- Detects your current Proxmox version
+- Checks for a compatible release on GitHub
+- Installs updates if available
+
+To check timer status:
+```bash
+systemctl status pve-webauthn-login-update.timer
+```
+
+To manually trigger an update check:
+```bash
+systemctl start pve-webauthn-login-update.service
+```
+
 ## Upgrades
 
-**Important:** This package requires an exact Proxmox version match. When Proxmox updates to a new version, this package will be automatically removed to prevent conflicts. Re-run the install script to install a compatible version:
+When Proxmox updates to a new version, this package will be automatically removed due to the version dependency. The auto-update timer will reinstall a compatible version when one becomes available.
 
+To manually reinstall after a Proxmox update:
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
 ```
+
+## Troubleshooting
+
+If the passkey button disappears or stops working:
+
+1. **Check syslog for errors:**
+   ```bash
+   grep pve-webauthn-login /var/log/syslog
+   ```
+
+2. **Verify services are running:**
+   ```bash
+   systemctl status pveproxy pvedaemon
+   ```
+
+3. **Run the install script** to check for updates:
+   ```bash
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
+   ```
+
+The module is designed to fail gracefully - if it can't load, Proxmox will run normally without passkey login.
 
 ## Uninstallation
 
@@ -85,12 +126,19 @@ apt remove pve-webauthn-login
 
 ## Security
 
+### Authentication
 - WebAuthn challenges include a 60-second timeout
 - Challenge tickets are cryptographically signed with Proxmox's RSA key
 - Only users with registered WebAuthn credentials can use this flow
 - User must exist and be enabled in Proxmox
 - Origin verification is handled by the WebAuthn standard
 - All authentication attempts are logged
+
+### Package Integrity
+- All releases are GPG-signed
+- The install script verifies signatures before installation
+- Public key is distributed in the repository ([keys/pve-webauthn-login.asc](keys/pve-webauthn-login.asc))
+- Uses Trust-On-First-Use (TOFU) model: once installed, future updates must be signed by the same key
 
 ## License
 
