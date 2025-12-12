@@ -102,7 +102,7 @@
             }
 
             if (!username) {
-                Ext.Msg.alert(gettext('Error'), gettext('Please enter a username'));
+                Ext.Msg.alert(gettext('Error'), gettext('A username is required for Passkey logins.'));
                 return;
             }
 
