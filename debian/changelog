@@ -1,3 +1,11 @@
+pve-webauthn-login (2025.12.2) stable; urgency=medium
+
+  * Proxmox VE 9.1.2 support
+  * Add /access/vncticket endpoint to auth bypass list
+  * Use dynamic Perl path detection for cross-version compatibility
+
+ -- chall37 <chall37@users.noreply.github.com>  Thu, 11 Dec 2025 22:00:00 -0500
+
 pve-webauthn-login (2025.12.1) stable; urgency=medium
 
   * Initial release (Proxmox VE 8.4.14)

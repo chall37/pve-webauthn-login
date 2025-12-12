@@ -1,5 +1,8 @@
 #!/usr/bin/make -f
 
+# Get Perl sitelib path dynamically
+PERL_SITELIB := $(shell perl -MConfig -e 'print $$Config{sitelib}')
+
 %:
 	dh $@
 
@@ -8,7 +11,7 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	install -D -m 644 src/PVE/WebAuthnLogin.pm \
-		debian/pve-webauthn-login/usr/local/share/perl/5.36.0/PVE/WebAuthnLogin.pm
+		debian/pve-webauthn-login$(PERL_SITELIB)/PVE/WebAuthnLogin.pm
 	install -D -m 644 js/webauthn-login.js \
 		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/webauthn-login.js
 	install -D -m 755 bin/pveproxy-wrapper \
