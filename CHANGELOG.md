@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Auto-update mechanism via daily systemd timer
-- Graceful degradation - module fails safely if incompatible, Proxmox runs normally
+- Graceful degradation - module is designed to fail safely if incompatible
 - Client-side error handling for backend unavailability
 - Troubleshooting section in README
+- `--no-auto-update` flag for install.sh to disable auto-updates on install
+- Documentation for disabling/re-enabling auto-updates
 
 ### Security
 - GPG signature verification for all package downloads
@@ -29,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update script rewritten as self-contained check-then-act (no longer calls install.sh)
 - Wrappers now use eval to catch load failures
 - Package dependency loosened to pve-manager >= 9.1.2 (persists across upgrades)
+- Package upgrades preserve auto-update timer enabled/disabled state
+- README disclaimer expanded with supply chain and fitness warnings
 - API endpoints return appropriate error messages:
   - Auth failures: generic "authentication failure"
   - Config issues: specific guidance (e.g., "WebAuthn is not configured")

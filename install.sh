@@ -1,8 +1,19 @@
 #!/bin/bash
 # pve-webauthn-login installer
 # Usage: bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
+#        curl ... | bash -s -- --no-auto-update
 
 set -e
+
+# Parse arguments
+NO_AUTO_UPDATE=false
+for arg in "$@"; do
+    case $arg in
+        --no-auto-update)
+            NO_AUTO_UPDATE=true
+            ;;
+    esac
+done
 
 REPO="chall37/pve-webauthn-login"
 COMPAT_URL="https://raw.githubusercontent.com/$REPO/main/compatibility.json"
@@ -106,6 +117,14 @@ dpkg -i "$TMP_DEB" || error "Package installation failed"
 # Cleanup handled by trap
 
 info "Successfully installed pve-webauthn-login $RELEASE_VERSION"
+
+# Disable auto-update timer if requested
+if [ "$NO_AUTO_UPDATE" = true ]; then
+    info "Disabling auto-update timer (--no-auto-update specified)"
+    systemctl disable pve-webauthn-login-update.timer 2>/dev/null || true
+    systemctl stop pve-webauthn-login-update.timer 2>/dev/null || true
+fi
+
 echo ""
 echo "Next steps:"
 echo "  1. Configure WebAuthn in Datacenter → Options → WebAuthn Settings"

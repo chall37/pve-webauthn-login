@@ -2,6 +2,10 @@
 
 WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hardware security keys, and other passkey authenticators as a standalone login method, bypassing password entry.
 
+Designed for home server environments where you want the security of authenticated access to the Proxmox UI without the friction of typing passwords.
+
+> **⚠️ Warning:** This package is not intended for production environments. It modifies Proxmox authentication behavior through monkey-patching and auto-updates daily from GitHub. While we make a best effort to keep the supply chain secure (GPG-signed releases, signature verification), the auto-update mechanism should be considered medium risk. No guarantees are made regarding fitness for any purpose. Use at your own risk.
+
 ## Features
 
 - **Passwordless authentication** using WebAuthn/FIDO2
@@ -9,7 +13,7 @@ WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hard
 - **No modification to Proxmox system files**
 - **Easy installation** via install script or Debian package
 - **Auto-updates** via daily systemd timer
-- **Graceful degradation** - if the module fails to load, Proxmox runs normally
+- **Graceful degradation** - designed to allow Proxmox to run normally if the module fails to load
 
 ## Requirements
 
@@ -80,6 +84,8 @@ This package includes a daily systemd timer that automatically checks for and in
 - Verifies the GPG signature matches the expected fingerprint
 - Only installs after all checks pass
 
+> **Note:** Failing to keep this package updated alongside Proxmox point releases may break your installation. If you disable auto-updates, you are responsible for manually updating when Proxmox is upgraded.
+
 To check timer status:
 ```bash
 systemctl status pve-webauthn-login-update.timer
@@ -90,9 +96,26 @@ To manually trigger an update check:
 systemctl start pve-webauthn-login-update.service
 ```
 
+### Disabling Auto-Updates
+
+To disable automatic updates:
+```bash
+systemctl disable --now pve-webauthn-login-update.timer
+```
+
+To re-enable:
+```bash
+systemctl enable --now pve-webauthn-login-update.timer
+```
+
+You can also install with auto-updates disabled from the start:
+```bash
+curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh | bash -s -- --no-auto-update
+```
+
 ## Upgrades
 
-If a new Proxmox version introduces breaking API changes, the module will fail gracefully and Proxmox will run normally without passkey login. The auto-update timer will install a compatible version when one becomes available.
+If a new Proxmox version introduces breaking API changes, the module is designed to fail gracefully, allowing Proxmox to run normally without passkey login. The auto-update timer will attempt to install a compatible version when one becomes available.
 
 ## Troubleshooting
 
@@ -113,7 +136,7 @@ If the passkey button disappears or stops working:
    bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
    ```
 
-The module is designed to fail gracefully - if it can't load, Proxmox will run normally without passkey login.
+The module is designed to fail gracefully, allowing Proxmox to run normally without passkey login if loading fails.
 
 ## Uninstallation
 
