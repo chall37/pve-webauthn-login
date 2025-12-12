@@ -32,9 +32,17 @@ case "$1" in
         systemctl restart pvedaemon || true
         systemctl restart pveproxy || true
 
-        # Enable the auto-update timer
-        systemctl enable pve-webauthn-login-update.timer || true
-        systemctl start pve-webauthn-login-update.timer || true
+        # Handle auto-update timer
+        # On upgrade: preserve existing enabled/disabled state
+        # On fresh install: enable by default
+        if [ -n "$2" ]; then
+            # Upgrade: just ensure timer is started if it was enabled
+            systemctl start pve-webauthn-login-update.timer 2>/dev/null || true
+        else
+            # Fresh install: enable and start
+            systemctl enable pve-webauthn-login-update.timer || true
+            systemctl start pve-webauthn-login-update.timer || true
+        fi
         ;;
 esac
 
