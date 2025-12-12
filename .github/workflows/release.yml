@@ -100,11 +100,15 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ steps.changelog.outputs.notes }}
         run: |
+          # Write notes to file to avoid shell escaping issues
+          echo "$RELEASE_NOTES" > release-notes.md
+
           # Create release with signed artifacts
           gh release create "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
-            --notes "${{ steps.changelog.outputs.notes }}" \
+            --notes-file release-notes.md \
             pve-webauthn-login_${{ inputs.version }}_all.deb \
             pve-webauthn-login_${{ inputs.version }}_all.deb.asc \
             install.sh \
