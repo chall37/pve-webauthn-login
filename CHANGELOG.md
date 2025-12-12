@@ -15,12 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - GPG signature verification for all package downloads
-- GPG signature verification for install.sh during auto-updates
+- GPG fingerprint hardcoded to prevent key substitution attacks
+- Tag format validation prevents injection in update script
+- Fix username enumeration via error code differences
+- Secure temp file handling (mktemp -d)
 - Release workflow signs both .deb packages and install.sh
 - Public key bundled with package for offline verification
 - Auto-update downloads from releases (not main branch) with signature verification
 
 ### Changed
+- Update script rewritten as self-contained check-then-act (no longer calls install.sh)
 - Wrappers now use eval to catch load failures
 - API endpoints return appropriate error messages:
   - Auth failures: generic "authentication failure"
@@ -29,5 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Perl module path is now version-agnostic
 
 ### Fixed
+- Unknown users now return same error as disabled users (prevents enumeration)
 
 ### Removed
