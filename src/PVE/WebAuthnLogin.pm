@@ -212,14 +212,14 @@ PVE::API2::AccessControl->register_method({
         my $rpcenv = PVE::RPCEnvironment::get();
         my $clientip = $rpcenv->get_client_ip() || '';
 
-        # Lookup username - this can fail if the function signature changed
+        # Lookup username - treat unknown users same as disabled (prevent enumeration)
         my $username;
         eval {
             $username = PVE::AccessControl::lookup_username($param->{username});
         };
         if ($@) {
-            syslog('err', "pve-webauthn-login: lookup_username failed: $@");
-            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+            syslog('err', "webauthn challenge failure; rhost=$clientip user=$param->{username} msg=lookup failed");
+            die PVE::Exception->new("authentication failure\n", code => 401);
         }
 
         # Verify user exists and is enabled (auth failure - generic message)
@@ -333,14 +333,14 @@ PVE::API2::AccessControl->register_method({
         my $rpcenv = PVE::RPCEnvironment::get();
         my $clientip = $rpcenv->get_client_ip() || '';
 
-        # Lookup username
+        # Lookup username - treat unknown users same as disabled (prevent enumeration)
         my $username;
         eval {
             $username = PVE::AccessControl::lookup_username($param->{username});
         };
         if ($@) {
-            syslog('err', "pve-webauthn-login: lookup_username failed: $@");
-            die PVE::Exception->new("Passkey authentication unavailable, possibly due to a version conflict. Check for updates or see syslog.\n", code => 500);
+            syslog('err', "webauthn login failure; rhost=$clientip user=$param->{username} msg=lookup failed");
+            die PVE::Exception->new("authentication failure\n", code => 401);
         }
 
         # Verify user is enabled (auth failure - generic)
