@@ -20,11 +20,11 @@ WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hard
 ### From .deb package
 
 ```bash
-# Copy the package to your Proxmox server
-scp pve-webauthn-login_1.0.0-1_all.deb root@proxmox:/tmp/
+# Copy the package to your Proxmox server (replace VERSION with actual version)
+scp pve-webauthn-login_VERSION-1_all.deb root@proxmox:/tmp/
 
 # Install
-ssh root@proxmox "dpkg -i /tmp/pve-webauthn-login_1.0.0-1_all.deb"
+ssh root@proxmox "dpkg -i /tmp/pve-webauthn-login_*_all.deb"
 ```
 
 ### Building from source
