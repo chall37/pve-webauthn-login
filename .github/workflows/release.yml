@@ -1,0 +1,94 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.1)'
+        required: true
+        type: string
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Version must be in format X.Y.Z"
+            exit 1
+          fi
+
+      - name: Extract latest changelog section
+        id: changelog
+        run: |
+          # Extract content between first ## [version] and next ## [version] or end
+          # Skip the [Unreleased] section, get the first actual version section
+          CHANGELOG_CONTENT=$(awk '
+            /^## \[Unreleased\]/ { next }
+            /^## \[/ {
+              if (found) exit
+              found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+
+          # If no versioned section found, check for unreleased content
+          if [ -z "$CHANGELOG_CONTENT" ]; then
+            CHANGELOG_CONTENT=$(awk '
+              /^## \[Unreleased\]/ { found=1; next }
+              /^## \[/ { exit }
+              found && NF { print }
+            ' CHANGELOG.md)
+          fi
+
+          # Fallback message if still empty
+          if [ -z "$CHANGELOG_CONTENT" ] || [ "$(echo "$CHANGELOG_CONTENT" | tr -d '[:space:]')" = "" ]; then
+            CHANGELOG_CONTENT="Release v${{ inputs.version }}"
+          fi
+
+          # Output for release notes
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "notes<<$EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Update debian/changelog version
+        run: |
+          DATE=$(date -R)
+          cat > debian/changelog << EOF
+          pve-webauthn-login (${{ inputs.version }}-1) stable; urgency=medium
+
+            * Release v${{ inputs.version }}
+
+           -- github-actions[bot] <github-actions[bot]@users.noreply.github.com>  $DATE
+          EOF
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts debhelper build-essential
+
+      - name: Build .deb package
+        run: |
+          dpkg-buildpackage -us -uc -b
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Move .deb to current directory
+          mv ../pve-webauthn-login_${{ inputs.version }}-1_all.deb .
+
+          # Create release with notes from changelog
+          gh release create "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }}" \
+            --notes "${{ steps.changelog.outputs.notes }}" \
+            pve-webauthn-login_${{ inputs.version }}-1_all.deb
