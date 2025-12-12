@@ -7,6 +7,10 @@ on:
         description: 'Version number (e.g., 2025.12.0)'
         required: true
         type: string
+      pve_version:
+        description: 'Target Proxmox VE version (e.g., 9.1.2)'
+        required: true
+        type: string
 
 jobs:
   build-release:
@@ -110,7 +114,7 @@ jobs:
 
           # Create release with signed artifacts and compatibility.json
           gh release create "v${{ inputs.version }}" \
-            --title "v${{ inputs.version }}" \
+            --title "v${{ inputs.version }} (PVE ${{ inputs.pve_version }})" \
             --notes-file release-notes.md \
             pve-webauthn-login_${{ inputs.version }}_all.deb \
             pve-webauthn-login_${{ inputs.version }}_all.deb.asc \
