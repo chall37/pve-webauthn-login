@@ -6,38 +6,42 @@ WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hard
 
 - **Passwordless authentication** using WebAuthn/FIDO2
 - **Support for** TouchID, Windows Hello, YubiKey, and other security keys
-- **No modification to Proxmox system files** - survives updates
-- **Easy installation** via Debian package
+- **No modification to Proxmox system files**
+- **Easy installation** via install script or Debian package
 
 ## Requirements
 
-- Proxmox VE 9.1.2 (see [COMPATIBILITY.md](COMPATIBILITY.md) for tested versions)
+- Proxmox VE 8.4.14 or 9.1.2 (see [COMPATIBILITY.md](COMPATIBILITY.md) for tested versions)
 - WebAuthn must be configured in Datacenter options
 - User must have a WebAuthn credential registered (via Two Factor settings)
 
 ## Installation
 
-### From .deb package
+Run on your Proxmox server:
 
 ```bash
-# Copy the package to your Proxmox server (replace VERSION with actual version)
-scp pve-webauthn-login_VERSION-1_all.deb root@proxmox:/tmp/
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
+```
 
-# Install
-ssh root@proxmox "dpkg -i /tmp/pve-webauthn-login_*_all.deb"
+The script automatically detects your Proxmox version and installs the correct package.
+
+### Manual installation
+
+Download the .deb for your Proxmox version from [GitHub Releases](https://github.com/chall37/pve-webauthn-login/releases):
+
+```bash
+wget https://github.com/chall37/pve-webauthn-login/releases/download/v2025.12.2/pve-webauthn-login_2025.12.2_all.deb
+dpkg -i pve-webauthn-login_2025.12.2_all.deb
 ```
 
 ### Building from source
-
-On a Debian/Ubuntu system with build tools:
 
 ```bash
 git clone https://github.com/chall37/pve-webauthn-login.git
 cd pve-webauthn-login
 dpkg-buildpackage -us -uc -b
+dpkg -i ../pve-webauthn-login_*.deb
 ```
-
-The package will be created in the parent directory.
 
 ## Usage
 
@@ -61,9 +65,17 @@ This package installs:
 
 - A Perl module that registers new API endpoints for passwordless WebAuthn login
 - JavaScript that adds a "Login with Passkey" button to the login form
-- A systemd drop-in that loads the module when pveproxy starts
+- Wrapper scripts that load the module before pveproxy/pvedaemon start
 
-No Proxmox system files are modified. Everything is installed to `/usr/local/` and `/etc/systemd/system/`, which are not touched by Proxmox updates.
+The wrappers use `dpkg-divert` to intercept the original binaries. No Proxmox system files are modified directly.
+
+## Upgrades
+
+**Important:** This package requires an exact Proxmox version match. When Proxmox updates to a new version, this package will be automatically removed to prevent conflicts. Re-run the install script to install a compatible version:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
+```
 
 ## Uninstallation
 
