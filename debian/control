@@ -8,7 +8,7 @@ Homepage: https://github.com/chall37/pve-webauthn-login
 
 Package: pve-webauthn-login
 Architecture: all
-Depends: ${misc:Depends}, proxmox-ve (>= 8.0)
+Depends: ${misc:Depends}, proxmox-ve (= 8.4.14)
 Description: WebAuthn passwordless login for Proxmox VE
  Enables TouchID, security keys, and other WebAuthn/passkey authenticators
  as a standalone login method for Proxmox VE, bypassing password entry.
