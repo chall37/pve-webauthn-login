@@ -92,12 +92,7 @@ systemctl start pve-webauthn-login-update.service
 
 ## Upgrades
 
-When Proxmox updates to a new version, this package will be automatically removed due to the version dependency. The auto-update timer will reinstall a compatible version when one becomes available.
-
-To manually reinstall after a Proxmox update:
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
-```
+If a new Proxmox version introduces breaking API changes, the module will fail gracefully and Proxmox will run normally without passkey login. The auto-update timer will install a compatible version when one becomes available.
 
 ## Troubleshooting
 
