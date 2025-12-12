@@ -31,6 +31,10 @@ case "$1" in
         systemctl daemon-reload
         systemctl restart pvedaemon || true
         systemctl restart pveproxy || true
+
+        # Enable the auto-update timer
+        systemctl enable pve-webauthn-login-update.timer || true
+        systemctl start pve-webauthn-login-update.timer || true
         ;;
 esac
 

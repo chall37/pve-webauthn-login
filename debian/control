@@ -17,4 +17,3 @@ Description: WebAuthn passwordless login for Proxmox VE
   - Passwordless authentication using WebAuthn/FIDO2
   - Support for TouchID, Windows Hello, hardware security keys
   - No modification to Proxmox system files
-  - Survives Proxmox updates

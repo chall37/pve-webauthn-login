@@ -1,0 +1,8 @@
+[Unit]
+Description=Update pve-webauthn-login if newer version available
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/share/pve-webauthn-login/update

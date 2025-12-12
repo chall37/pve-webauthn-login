@@ -102,7 +102,7 @@
             }
 
             if (!username) {
-                Ext.Msg.alert(gettext('Error'), gettext('Please enter a username'));
+                Ext.Msg.alert(gettext('Error'), gettext('A username is required for Passkey logins.'));
                 return;
             }
 
@@ -212,13 +212,28 @@
                 }
 
                 var msg = gettext('Authentication failed');
-                if (err.result && err.result.message) {
+                var title = gettext('WebAuthn Error');
+
+                // Check for specific error conditions
+                if (err.status === 404) {
+                    // Endpoint not registered - module likely didn't load
+                    title = gettext('Passkey Unavailable');
+                    msg = gettext('Passkey login is temporarily unavailable. Check github.com/chall37/pve-webauthn-login for updates.');
+                } else if (err.status === 500) {
+                    // Server-side error - show the message from server if available
+                    title = gettext('Passkey Error');
+                    if (err.result && err.result.message) {
+                        msg = err.result.message;
+                    } else {
+                        msg = gettext('Passkey login encountered an error. Check syslog for details.');
+                    }
+                } else if (err.result && err.result.message) {
                     msg = err.result.message;
                 } else if (err.message) {
                     msg = err.message;
                 }
 
-                Ext.Msg.alert(gettext('WebAuthn Error'), msg);
+                Ext.Msg.alert(title, msg);
             }
         };
 
