@@ -1,0 +1,20 @@
+Source: pve-webauthn-login
+Section: admin
+Priority: optional
+Maintainer: chall37 <chall37@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+Homepage: https://github.com/chall37/pve-webauthn-login
+
+Package: pve-webauthn-login
+Architecture: all
+Depends: ${misc:Depends}, proxmox-ve (>= 8.0)
+Description: WebAuthn passwordless login for Proxmox VE
+ Enables TouchID, security keys, and other WebAuthn/passkey authenticators
+ as a standalone login method for Proxmox VE, bypassing password entry.
+ .
+ Features:
+  - Passwordless authentication using WebAuthn/FIDO2
+  - Support for TouchID, Windows Hello, hardware security keys
+  - No modification to Proxmox system files
+  - Survives Proxmox updates

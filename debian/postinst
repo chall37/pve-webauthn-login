@@ -1,0 +1,37 @@
+#!/bin/bash
+set -e
+
+# pveproxy diversion
+PVEPROXY_WRAPPER=/usr/local/share/pve-webauthn-login/pveproxy-wrapper
+PVEPROXY_ORIGINAL=/usr/bin/pveproxy
+PVEPROXY_DIVERTED=/usr/bin/pveproxy.pve-webauthn-login-orig
+
+# pvedaemon diversion
+PVEDAEMON_WRAPPER=/usr/local/share/pve-webauthn-login/pvedaemon-wrapper
+PVEDAEMON_ORIGINAL=/usr/bin/pvedaemon
+PVEDAEMON_DIVERTED=/usr/bin/pvedaemon.pve-webauthn-login-orig
+
+case "$1" in
+    configure)
+        # Divert the original pveproxy
+        if [ ! -e "$PVEPROXY_DIVERTED" ]; then
+            dpkg-divert --package pve-webauthn-login --add --rename \
+                --divert "$PVEPROXY_DIVERTED" "$PVEPROXY_ORIGINAL"
+        fi
+        ln -sf "$PVEPROXY_WRAPPER" "$PVEPROXY_ORIGINAL"
+
+        # Divert the original pvedaemon
+        if [ ! -e "$PVEDAEMON_DIVERTED" ]; then
+            dpkg-divert --package pve-webauthn-login --add --rename \
+                --divert "$PVEDAEMON_DIVERTED" "$PVEDAEMON_ORIGINAL"
+        fi
+        ln -sf "$PVEDAEMON_WRAPPER" "$PVEDAEMON_ORIGINAL"
+
+        # Reload systemd and restart services
+        systemctl daemon-reload
+        systemctl restart pvedaemon || true
+        systemctl restart pveproxy || true
+        ;;
+esac
+
+#DEBHELPER#

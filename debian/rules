@@ -1,0 +1,20 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Nothing to build
+
+override_dh_auto_install:
+	install -D -m 644 src/PVE/WebAuthnLogin.pm \
+		debian/pve-webauthn-login/usr/local/share/perl/5.36.0/PVE/WebAuthnLogin.pm
+	install -D -m 644 js/webauthn-login.js \
+		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/webauthn-login.js
+	install -D -m 755 bin/pveproxy-wrapper \
+		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/pveproxy-wrapper
+	install -D -m 755 bin/pvedaemon-wrapper \
+		debian/pve-webauthn-login/usr/local/share/pve-webauthn-login/pvedaemon-wrapper
+
+override_dh_usrlocal:
+	# Allow files in /usr/local - this is intentional for this package

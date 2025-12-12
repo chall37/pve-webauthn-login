@@ -1,0 +1,39 @@
+#!/bin/bash
+set -e
+
+# pveproxy paths
+PVEPROXY_ORIGINAL=/usr/bin/pveproxy
+PVEPROXY_DIVERTED=/usr/bin/pveproxy.pve-webauthn-login-orig
+
+# pvedaemon paths
+PVEDAEMON_ORIGINAL=/usr/bin/pvedaemon
+PVEDAEMON_DIVERTED=/usr/bin/pvedaemon.pve-webauthn-login-orig
+
+case "$1" in
+    remove|purge)
+        # Remove the pveproxy symlink and diversion
+        if [ -L "$PVEPROXY_ORIGINAL" ]; then
+            rm -f "$PVEPROXY_ORIGINAL"
+        fi
+        if dpkg-divert --list pve-webauthn-login | grep -q "$PVEPROXY_ORIGINAL"; then
+            dpkg-divert --package pve-webauthn-login --remove --rename \
+                --divert "$PVEPROXY_DIVERTED" "$PVEPROXY_ORIGINAL"
+        fi
+
+        # Remove the pvedaemon symlink and diversion
+        if [ -L "$PVEDAEMON_ORIGINAL" ]; then
+            rm -f "$PVEDAEMON_ORIGINAL"
+        fi
+        if dpkg-divert --list pve-webauthn-login | grep -q "$PVEDAEMON_ORIGINAL"; then
+            dpkg-divert --package pve-webauthn-login --remove --rename \
+                --divert "$PVEDAEMON_DIVERTED" "$PVEDAEMON_ORIGINAL"
+        fi
+
+        # Reload systemd and restart services
+        systemctl daemon-reload
+        systemctl restart pvedaemon || true
+        systemctl restart pveproxy || true
+        ;;
+esac
+
+#DEBHELPER#

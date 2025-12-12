@@ -1,0 +1,34 @@
+#!/usr/bin/perl -T
+
+# pvedaemon wrapper for pve-webauthn-login
+# This wrapper loads the WebAuthnLogin module before executing the real pvedaemon
+
+$ENV{'PATH'} = '/sbin:/bin:/usr/sbin:/usr/bin';
+
+delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
+
+use strict;
+use warnings;
+
+# Load our WebAuthn login module BEFORE anything else
+use PVE::WebAuthnLogin;
+
+# Now load and run the real pvedaemon
+use PVE::SafeSyslog;
+use PVE::Service::pvedaemon;
+
+$SIG{'__WARN__'} = sub {
+    my $err = $@;
+    my $t = $_[0];
+    chomp $t;
+    print STDERR "$t\n";
+    syslog('warning', "%s", $t);
+    $@ = $err;
+};
+
+my $prepare = sub {
+    # create dir for dtach sockets
+    mkdir "/var/run/dtach";
+};
+
+PVE::Service::pvedaemon->run_cli_handler(prepare => $prepare);

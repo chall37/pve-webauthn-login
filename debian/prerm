@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # Stop services before removing/upgrading
+        systemctl stop pveproxy || true
+        systemctl stop pvedaemon || true
+        ;;
+esac
+
+#DEBHELPER#

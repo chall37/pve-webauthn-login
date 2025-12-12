@@ -1,0 +1,7 @@
+pve-webauthn-login (1.0.0-1) stable; urgency=medium
+
+  * Initial release
+  * WebAuthn passwordless login for Proxmox VE
+  * Support for TouchID, Windows Hello, and hardware security keys
+
+ -- chall37 <chall37@users.noreply.github.com>  Thu, 11 Dec 2025 17:00:00 -0500
