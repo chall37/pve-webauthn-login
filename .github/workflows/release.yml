@@ -64,7 +64,7 @@ jobs:
         run: |
           DATE=$(date -R)
           cat > debian/changelog << EOF
-          pve-webauthn-login (${{ inputs.version }}-1) stable; urgency=medium
+          pve-webauthn-login (${{ inputs.version }}) stable; urgency=medium
 
             * Release v${{ inputs.version }}
 
@@ -85,10 +85,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Move .deb to current directory
-          mv ../pve-webauthn-login_${{ inputs.version }}-1_all.deb .
+          mv ../pve-webauthn-login_${{ inputs.version }}_all.deb .
 
           # Create release with notes from changelog
           gh release create "v${{ inputs.version }}" \
             --title "v${{ inputs.version }}" \
             --notes "${{ steps.changelog.outputs.notes }}" \
-            pve-webauthn-login_${{ inputs.version }}-1_all.deb
+            pve-webauthn-login_${{ inputs.version }}_all.deb
