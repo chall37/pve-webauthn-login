@@ -1,5 +1,7 @@
 # pve-webauthn-login
 
+<img src="assets/webauthn_login_screenshot.png" alt="Login with Passkey button" width="280" align="right">
+
 WebAuthn passwordless login for Proxmox VE. Enables TouchID, Windows Hello, hardware security keys, and other passkey authenticators as a standalone login method, bypassing password entry.
 
 Designed for home server environments where you want the security of authenticated access to the Proxmox UI without the friction of typing passwords.
