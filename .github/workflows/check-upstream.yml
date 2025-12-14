@@ -205,8 +205,9 @@ jobs:
           # Push the branch
           git push -f origin "$BRANCH_NAME"
 
-          # Check if PR already exists for this branch
-          if EXISTING_PR=$(gh pr view "$BRANCH_NAME" --json number --jq '.number' 2>/dev/null); then
+          # Check if an OPEN PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING_PR" ]; then
             echo "PR #$EXISTING_PR already exists (branch updated)"
           else
             echo "Creating new PR"
