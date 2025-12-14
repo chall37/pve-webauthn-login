@@ -133,9 +133,10 @@ If the passkey button disappears or stops working:
    systemctl status pveproxy pvedaemon
    ```
 
-3. **Run the install script** to check for updates:
+3. **Manually trigger an update check:**
    ```bash
-   bash -c "$(curl -fsSL https://raw.githubusercontent.com/chall37/pve-webauthn-login/main/install.sh)"
+   systemctl start pve-webauthn-login-update.service
+   journalctl -u pve-webauthn-login-update.service
    ```
 
 The module is designed to fail gracefully, allowing Proxmox to run normally without passkey login if loading fails.
