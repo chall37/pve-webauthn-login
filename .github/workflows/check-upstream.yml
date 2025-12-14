@@ -177,17 +177,42 @@ jobs:
           NEW_STATE: ${{ steps.check.outputs.new_state }}
           ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
         run: |
-          # Use a fixed branch name (not date-based) so we update the same PR
           BRANCH_NAME="upstream-state-update"
 
-          # Check if branch already exists
-          if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
-            echo "Branch $BRANCH_NAME already exists, updating it"
+          # Create fingerprint of new state to detect if PR already has it
+          STATE_FINGERPRINT=$(echo "$NEW_STATE" | md5sum | cut -d' ' -f1)
+          echo "New state fingerprint: $STATE_FINGERPRINT"
+
+          # Check if an OPEN PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Found existing PR #$EXISTING_PR"
+
+            # Check if PR branch already has the correct state
             git fetch origin "$BRANCH_NAME"
+            EXISTING_STATE=$(git show "origin/$BRANCH_NAME:.github/upstream-state.json" 2>/dev/null || echo "")
+            EXISTING_FINGERPRINT=$(echo "$EXISTING_STATE" | md5sum | cut -d' ' -f1)
+            echo "Existing state fingerprint: $EXISTING_FINGERPRINT"
+
+            if [ "$STATE_FINGERPRINT" = "$EXISTING_FINGERPRINT" ]; then
+              echo "PR #$EXISTING_PR already has correct state, skipping"
+              exit 0
+            fi
+
+            echo "PR needs update with new state"
             git checkout -f "$BRANCH_NAME"
             git reset --hard origin/main
           else
-            git checkout -b "$BRANCH_NAME"
+            echo "No existing PR, creating new branch"
+            # Check if branch exists (maybe from closed PR)
+            if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+              git fetch origin "$BRANCH_NAME"
+              git checkout -f "$BRANCH_NAME"
+              git reset --hard origin/main
+            else
+              git checkout -b "$BRANCH_NAME"
+            fi
           fi
 
           # Write the new state file
@@ -205,13 +230,9 @@ jobs:
           # Push the branch
           git push -f origin "$BRANCH_NAME"
 
-          # Check if an OPEN PR already exists for this branch
-          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING_PR" ]; then
-            echo "PR #$EXISTING_PR already exists (branch updated)"
-          else
+          # Create PR if none exists
+          if [ -z "$EXISTING_PR" ]; then
             echo "Creating new PR"
-            # Write PR body to file
             {
               echo "## Upstream State Update"
               echo ""
@@ -230,4 +251,6 @@ jobs:
             gh pr create \
               --title "Update upstream state tracking" \
               --body-file /tmp/pr-body.md
+          else
+            echo "PR #$EXISTING_PR branch updated"
           fi
