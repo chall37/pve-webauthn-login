@@ -140,10 +140,8 @@ jobs:
             echo "*This PR was automatically created by the upstream monitoring workflow.*"
           } > /tmp/pr-body.md
 
-          # Check if PR already exists for this branch
-          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
-
-          if [ -n "$EXISTING_PR" ]; then
+          # Check if PR already exists for this branch (use gh pr view which is more reliable)
+          if EXISTING_PR=$(gh pr view "$BRANCH_NAME" --json number --jq '.number' 2>/dev/null); then
             echo "PR #$EXISTING_PR already exists"
             echo "pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
           else
