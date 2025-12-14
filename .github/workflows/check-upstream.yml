@@ -10,8 +10,9 @@ jobs:
   check-updates:
     runs-on: ubuntu-latest
     permissions:
+      contents: write
+      pull-requests: write
       issues: write
-      contents: read
 
     steps:
       - name: Checkout
@@ -74,7 +75,7 @@ jobs:
             fi
           done
 
-          # Save new state
+          # Save new state to file
           echo "$NEW_STATE" > "$STATE_FILE"
 
           # Output results
@@ -89,54 +90,119 @@ jobs:
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Commit state file
-        if: always()
+      - name: Create branch and PR for state update
+        if: steps.check.outputs.has_updates == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATES: ${{ steps.check.outputs.updates }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Generate branch name with date
+          BRANCH_NAME="upstream-update/$(date +%Y-%m-%d)"
 
-          if [ -f ".github/upstream-state.json" ]; then
-            git add .github/upstream-state.json
-            git diff --staged --quiet || git commit -m "Update upstream state tracking"
-            git push || echo "Nothing to push"
+          # Check if branch already exists (from earlier run today)
+          if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+            echo "Branch $BRANCH_NAME already exists, updating it"
+            git fetch origin "$BRANCH_NAME"
+            git checkout "$BRANCH_NAME"
+            git reset --hard origin/main
+          else
+            git checkout -b "$BRANCH_NAME"
           fi
 
-      - name: Create issue for updates
+          # Commit the state file update
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/upstream-state.json
+          git commit -m "Update upstream state tracking" || {
+            echo "No changes to commit"
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          # Push the branch
+          git push -f origin "$BRANCH_NAME"
+
+          # Write PR body to file to avoid shell escaping issues
+          cat > /tmp/pr-body.md << 'ENDOFBODY'
+## Upstream State Update
+
+This PR updates the upstream state tracking file to acknowledge the detected changes.
+
+Merge this PR after reviewing the associated issue and confirming compatibility.
+
+---
+*This PR was automatically created by the upstream monitoring workflow.*
+ENDOFBODY
+
+          # Check if PR already exists for this branch
+          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR #$EXISTING_PR already exists"
+            echo "pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+          else
+            echo "Creating new PR"
+            PR_URL=$(gh pr create \
+              --title "Update upstream state tracking - $(date +%Y-%m-%d)" \
+              --body-file /tmp/pr-body.md \
+              --label "upstream-update")
+            PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or update issue
         if: steps.check.outputs.has_updates == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATES: ${{ steps.check.outputs.updates }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           # Check if there's already an open issue
           EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
 
           # Write body to file to avoid shell escaping issues
           cat > /tmp/issue-body.md << 'ENDOFBODY'
-          ## Upstream Proxmox Updates Detected
+## Upstream Proxmox Updates Detected
 
-          The following upstream repositories have new commits since last check:
+The following upstream repositories have new commits since last check:
 
-          ENDOFBODY
+ENDOFBODY
 
           echo "$UPDATES" >> /tmp/issue-body.md
 
+          cat >> /tmp/issue-body.md << ENDOFBODY
+
+## Associated PR
+
+ENDOFBODY
+
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Merge #$PR_NUMBER to acknowledge these changes and update the state tracking." >> /tmp/issue-body.md
+          else
+            echo "No PR was created (no state changes needed)." >> /tmp/issue-body.md
+          fi
+
           cat >> /tmp/issue-body.md << 'ENDOFBODY'
 
-          ### Action Required
+## Action Required
 
-          1. Review the changes in the linked comparisons
-          2. Check if any changes affect:
-             - `PVE::AccessControl` (ticket/auth functions)
-             - `PVE::HTTPServer::auth_handler`
-             - `PVE::Service::pveproxy`
-             - `PVE.window.LoginWindow` (ExtJS)
-          3. Test the plugin against updated Proxmox if needed
-          4. Update COMPATIBILITY.md with test results
-          5. Close this issue when validated
+1. Review the changes in the linked comparisons above
+2. Check if any changes affect:
+   - `PVE::AccessControl` (ticket/auth functions)
+   - `PVE::HTTPServer::auth_handler`
+   - `PVE::Service::pveproxy`
+   - `PVE.window.LoginWindow` (ExtJS)
+3. If changes affect compatibility:
+   - Test the plugin against updated Proxmox
+   - Update `compatibility.json` if a new PVE version needs to be added
+   - Push any necessary changes to the PR branch
+4. Merge the PR to acknowledge the upstream changes
+5. Close this issue when validated
 
-          ---
-          *This issue was automatically created by the upstream monitoring workflow.*
-          ENDOFBODY
+---
+*This issue was automatically created by the upstream monitoring workflow.*
+ENDOFBODY
 
           if [ -n "$EXISTING" ]; then
             echo "Updating existing issue #$EXISTING"
