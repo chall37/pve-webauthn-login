@@ -91,18 +91,96 @@ jobs:
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create branch and PR for state update
+      # Issue step runs FIRST (before PR)
+      - name: Create or update issue
         if: steps.check.outputs.has_updates == 'true'
-        id: pr
+        id: issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATES: ${{ steps.check.outputs.updates }}
-          NEW_STATE: ${{ steps.check.outputs.new_state }}
         run: |
-          # Generate branch name with date
-          BRANCH_NAME="upstream-update/$(date +%Y-%m-%d)"
+          # Check if there's already an open issue with upstream-update label
+          EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
 
-          # Check if branch already exists (from earlier run today)
+          # Create a fingerprint of the updates to detect duplicates
+          FINGERPRINT=$(echo "$UPDATES" | md5sum | cut -d' ' -f1)
+
+          if [ -n "$EXISTING" ]; then
+            echo "Found existing issue #$EXISTING"
+
+            # Check if we already commented with this exact update
+            EXISTING_FINGERPRINT=$(gh issue view "$EXISTING" --json body,comments \
+              --jq '.body, .comments[].body' 2>/dev/null | grep -o "fingerprint:$FINGERPRINT" || true)
+
+            if [ -n "$EXISTING_FINGERPRINT" ]; then
+              echo "Updates already reported (fingerprint match), skipping comment"
+              echo "issue_number=$EXISTING" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # Add comment with new updates
+            {
+              echo "## Updated Upstream Changes"
+              echo ""
+              echo "New commits detected since last acknowledged state:"
+              echo ""
+              echo "$UPDATES"
+              echo ""
+              echo "---"
+              echo "*$(date -u '+%Y-%m-%d %H:%M:%S UTC')* <!-- fingerprint:$FINGERPRINT -->"
+            } > /tmp/comment-body.md
+
+            echo "Adding comment with new updates"
+            gh issue comment "$EXISTING" --body-file /tmp/comment-body.md
+            echo "issue_number=$EXISTING" >> $GITHUB_OUTPUT
+          else
+            # Create new issue with full body
+            {
+              echo "## Upstream Proxmox Updates Detected"
+              echo ""
+              echo "The following upstream repositories have new commits since last acknowledged state:"
+              echo ""
+              echo "$UPDATES"
+              echo ""
+              echo "## Action Required"
+              echo ""
+              echo "1. Review the changes in the linked comparisons above"
+              echo "2. Check if any changes affect:"
+              echo "   - \`PVE::AccessControl\` (ticket/auth functions)"
+              echo "   - \`PVE::HTTPServer::auth_handler\`"
+              echo "   - \`PVE::Service::pveproxy\`"
+              echo "   - \`PVE.window.LoginWindow\` (ExtJS)"
+              echo "3. If changes affect compatibility:"
+              echo "   - Test the plugin against updated Proxmox"
+              echo "   - Update \`compatibility.json\` if a new PVE version needs to be added"
+              echo "4. Merge the associated PR to acknowledge the upstream changes"
+              echo "5. Close this issue when validated"
+              echo ""
+              echo "---"
+              echo "*$(date -u '+%Y-%m-%d %H:%M:%S UTC')* <!-- fingerprint:$FINGERPRINT -->"
+            } > /tmp/issue-body.md
+
+            echo "Creating new issue"
+            ISSUE_URL=$(gh issue create \
+              --title "Upstream Proxmox updates detected - validation required" \
+              --body-file /tmp/issue-body.md \
+              --label "upstream-update")
+            ISSUE_NUMBER=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+            echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          fi
+
+      # PR step runs AFTER issue
+      - name: Create or update PR for state update
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_STATE: ${{ steps.check.outputs.new_state }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
+        run: |
+          # Use a fixed branch name (not date-based) so we update the same PR
+          BRANCH_NAME="upstream-state-update"
+
+          # Check if branch already exists
           if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
             echo "Branch $BRANCH_NAME already exists, updating it"
             git fetch origin "$BRANCH_NAME"
@@ -112,7 +190,7 @@ jobs:
             git checkout -b "$BRANCH_NAME"
           fi
 
-          # Write the new state file (after branch checkout to avoid conflicts)
+          # Write the new state file
           echo "$NEW_STATE" > .github/upstream-state.json
 
           # Commit the state file update
@@ -121,93 +199,35 @@ jobs:
           git add .github/upstream-state.json
           git commit -m "Update upstream state tracking" || {
             echo "No changes to commit"
-            echo "pr_number=" >> $GITHUB_OUTPUT
             exit 0
           }
 
           # Push the branch
           git push -f origin "$BRANCH_NAME"
 
-          # Write PR body to file
-          {
-            echo "## Upstream State Update"
-            echo ""
-            echo "This PR updates the upstream state tracking file to acknowledge the detected changes."
-            echo ""
-            echo "Merge this PR after reviewing the associated issue and confirming compatibility."
-            echo ""
-            echo "---"
-            echo "*This PR was automatically created by the upstream monitoring workflow.*"
-          } > /tmp/pr-body.md
-
           # Check if PR already exists for this branch
-          EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
-
-          if [ -n "$EXISTING_PR" ]; then
-            echo "PR #$EXISTING_PR already exists"
-            echo "pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+          if EXISTING_PR=$(gh pr view "$BRANCH_NAME" --json number --jq '.number' 2>/dev/null); then
+            echo "PR #$EXISTING_PR already exists (branch updated)"
           else
             echo "Creating new PR"
-            PR_URL=$(gh pr create \
-              --title "Update upstream state tracking - $(date +%Y-%m-%d)" \
+            # Write PR body to file
+            {
+              echo "## Upstream State Update"
+              echo ""
+              echo "This PR updates the upstream state tracking file to acknowledge the detected changes."
+              echo ""
+              if [ -n "$ISSUE_NUMBER" ]; then
+                echo "Closes #$ISSUE_NUMBER"
+                echo ""
+              fi
+              echo "Merge this PR after reviewing the associated issue and confirming compatibility."
+              echo ""
+              echo "---"
+              echo "*This PR was automatically created by the upstream monitoring workflow.*"
+            } > /tmp/pr-body.md
+
+            gh pr create \
+              --title "Update upstream state tracking" \
               --body-file /tmp/pr-body.md \
-              --label "upstream-update")
-            PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
-            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create or update issue
-        if: steps.check.outputs.has_updates == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UPDATES: ${{ steps.check.outputs.updates }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-        run: |
-          # Check if there's already an open issue
-          EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
-
-          # Write body to file
-          {
-            echo "## Upstream Proxmox Updates Detected"
-            echo ""
-            echo "The following upstream repositories have new commits since last check:"
-            echo ""
-            echo "$UPDATES"
-            echo ""
-            echo "## Associated PR"
-            echo ""
-            if [ -n "$PR_NUMBER" ]; then
-              echo "Merge #$PR_NUMBER to acknowledge these changes and update the state tracking."
-            else
-              echo "No PR was created (no state changes needed)."
-            fi
-            echo ""
-            echo "## Action Required"
-            echo ""
-            echo "1. Review the changes in the linked comparisons above"
-            echo "2. Check if any changes affect:"
-            echo "   - \`PVE::AccessControl\` (ticket/auth functions)"
-            echo "   - \`PVE::HTTPServer::auth_handler\`"
-            echo "   - \`PVE::Service::pveproxy\`"
-            echo "   - \`PVE.window.LoginWindow\` (ExtJS)"
-            echo "3. If changes affect compatibility:"
-            echo "   - Test the plugin against updated Proxmox"
-            echo "   - Update \`compatibility.json\` if a new PVE version needs to be added"
-            echo "   - Push any necessary changes to the PR branch"
-            echo "4. Merge the PR to acknowledge the upstream changes"
-            echo "5. Close this issue when validated"
-            echo ""
-            echo "---"
-            echo "*This issue was automatically created by the upstream monitoring workflow.*"
-          } > /tmp/issue-body.md
-
-          if [ -n "$EXISTING" ]; then
-            echo "Updating existing issue #$EXISTING"
-            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
-          else
-            echo "Creating new issue"
-            gh issue create \
-              --title "Upstream Proxmox updates detected - validation required" \
-              --body-file /tmp/issue-body.md \
               --label "upstream-update"
           fi
