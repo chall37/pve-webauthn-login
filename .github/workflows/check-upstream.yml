@@ -123,17 +123,17 @@ jobs:
           # Push the branch
           git push -f origin "$BRANCH_NAME"
 
-          # Write PR body to file to avoid shell escaping issues
-          cat > /tmp/pr-body.md << 'ENDOFBODY'
-## Upstream State Update
-
-This PR updates the upstream state tracking file to acknowledge the detected changes.
-
-Merge this PR after reviewing the associated issue and confirming compatibility.
-
----
-*This PR was automatically created by the upstream monitoring workflow.*
-ENDOFBODY
+          # Write PR body to file
+          {
+            echo "## Upstream State Update"
+            echo ""
+            echo "This PR updates the upstream state tracking file to acknowledge the detected changes."
+            echo ""
+            echo "Merge this PR after reviewing the associated issue and confirming compatibility."
+            echo ""
+            echo "---"
+            echo "*This PR was automatically created by the upstream monitoring workflow.*"
+          } > /tmp/pr-body.md
 
           # Check if PR already exists for this branch
           EXISTING_PR=$(gh pr list --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')
@@ -161,48 +161,40 @@ ENDOFBODY
           # Check if there's already an open issue
           EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
 
-          # Write body to file to avoid shell escaping issues
-          cat > /tmp/issue-body.md << 'ENDOFBODY'
-## Upstream Proxmox Updates Detected
-
-The following upstream repositories have new commits since last check:
-
-ENDOFBODY
-
-          echo "$UPDATES" >> /tmp/issue-body.md
-
-          cat >> /tmp/issue-body.md << ENDOFBODY
-
-## Associated PR
-
-ENDOFBODY
-
-          if [ -n "$PR_NUMBER" ]; then
-            echo "Merge #$PR_NUMBER to acknowledge these changes and update the state tracking." >> /tmp/issue-body.md
-          else
-            echo "No PR was created (no state changes needed)." >> /tmp/issue-body.md
-          fi
-
-          cat >> /tmp/issue-body.md << 'ENDOFBODY'
-
-## Action Required
-
-1. Review the changes in the linked comparisons above
-2. Check if any changes affect:
-   - `PVE::AccessControl` (ticket/auth functions)
-   - `PVE::HTTPServer::auth_handler`
-   - `PVE::Service::pveproxy`
-   - `PVE.window.LoginWindow` (ExtJS)
-3. If changes affect compatibility:
-   - Test the plugin against updated Proxmox
-   - Update `compatibility.json` if a new PVE version needs to be added
-   - Push any necessary changes to the PR branch
-4. Merge the PR to acknowledge the upstream changes
-5. Close this issue when validated
-
----
-*This issue was automatically created by the upstream monitoring workflow.*
-ENDOFBODY
+          # Write body to file
+          {
+            echo "## Upstream Proxmox Updates Detected"
+            echo ""
+            echo "The following upstream repositories have new commits since last check:"
+            echo ""
+            echo "$UPDATES"
+            echo ""
+            echo "## Associated PR"
+            echo ""
+            if [ -n "$PR_NUMBER" ]; then
+              echo "Merge #$PR_NUMBER to acknowledge these changes and update the state tracking."
+            else
+              echo "No PR was created (no state changes needed)."
+            fi
+            echo ""
+            echo "## Action Required"
+            echo ""
+            echo "1. Review the changes in the linked comparisons above"
+            echo "2. Check if any changes affect:"
+            echo "   - \`PVE::AccessControl\` (ticket/auth functions)"
+            echo "   - \`PVE::HTTPServer::auth_handler\`"
+            echo "   - \`PVE::Service::pveproxy\`"
+            echo "   - \`PVE.window.LoginWindow\` (ExtJS)"
+            echo "3. If changes affect compatibility:"
+            echo "   - Test the plugin against updated Proxmox"
+            echo "   - Update \`compatibility.json\` if a new PVE version needs to be added"
+            echo "   - Push any necessary changes to the PR branch"
+            echo "4. Merge the PR to acknowledge the upstream changes"
+            echo "5. Close this issue when validated"
+            echo ""
+            echo "---"
+            echo "*This issue was automatically created by the upstream monitoring workflow.*"
+          } > /tmp/issue-body.md
 
           if [ -n "$EXISTING" ]; then
             echo "Updating existing issue #$EXISTING"
