@@ -75,10 +75,7 @@ jobs:
             fi
           done
 
-          # Save new state to file
-          echo "$NEW_STATE" > "$STATE_FILE"
-
-          # Output results
+          # Output results (don't write state file yet - do it after branch checkout)
           if [ -n "$UPDATES" ]; then
             echo "has_updates=true" >> $GITHUB_OUTPUT
             # Use a delimiter for multiline output
@@ -86,6 +83,10 @@ jobs:
             echo "updates<<$EOF" >> $GITHUB_OUTPUT
             echo -e "$UPDATES" >> $GITHUB_OUTPUT
             echo "$EOF" >> $GITHUB_OUTPUT
+            # Also output the new state JSON
+            echo "new_state<<EOF_STATE" >> $GITHUB_OUTPUT
+            echo "$NEW_STATE" >> $GITHUB_OUTPUT
+            echo "EOF_STATE" >> $GITHUB_OUTPUT
           else
             echo "has_updates=false" >> $GITHUB_OUTPUT
           fi
@@ -96,6 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATES: ${{ steps.check.outputs.updates }}
+          NEW_STATE: ${{ steps.check.outputs.new_state }}
         run: |
           # Generate branch name with date
           BRANCH_NAME="upstream-update/$(date +%Y-%m-%d)"
@@ -104,11 +106,14 @@ jobs:
           if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
             echo "Branch $BRANCH_NAME already exists, updating it"
             git fetch origin "$BRANCH_NAME"
-            git checkout "$BRANCH_NAME"
+            git checkout -f "$BRANCH_NAME"
             git reset --hard origin/main
           else
             git checkout -b "$BRANCH_NAME"
           fi
+
+          # Write the new state file (after branch checkout to avoid conflicts)
+          echo "$NEW_STATE" > .github/upstream-state.json
 
           # Commit the state file update
           git config user.name "github-actions[bot]"
