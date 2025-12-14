@@ -14,6 +14,9 @@ use PVE::API2::AccessControl;
 # Path to our custom JS file
 my $webauthn_js_path = '/usr/local/share/pve-webauthn-login/webauthn-login.js';
 
+# Path to EOL status file (written by update script when EOL detected)
+my $eol_file_path = '/var/lib/pve-webauthn-login/eol.json';
+
 # Track which parts loaded successfully
 our $auth_handler_patched = 0;
 our $api_endpoints_registered = 0;
@@ -140,6 +143,13 @@ sub patch_pveproxy {
             if (-f $webauthn_js_path) {
                 $self->{server_config}->{pages}->{'/webauthn-login.js'} = {
                     file => $webauthn_js_path,
+                };
+            }
+
+            # Add EOL status file if it exists (served without auth)
+            if (-f $eol_file_path) {
+                $self->{server_config}->{pages}->{'/webauthn-eol.json'} = {
+                    file => $eol_file_path,
                 };
             }
         };
