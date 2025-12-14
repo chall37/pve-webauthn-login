@@ -105,38 +105,46 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATES: ${{ steps.check.outputs.updates }}
         run: |
           # Check if there's already an open issue
           EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
 
-          BODY="## Upstream Proxmox Updates Detected
+          # Write body to file to avoid shell escaping issues
+          cat > /tmp/issue-body.md << 'ENDOFBODY'
+          ## Upstream Proxmox Updates Detected
 
           The following upstream repositories have new commits since last check:
 
-          ${{ steps.check.outputs.updates }}
+          ENDOFBODY
+
+          echo "$UPDATES" >> /tmp/issue-body.md
+
+          cat >> /tmp/issue-body.md << 'ENDOFBODY'
 
           ### Action Required
 
           1. Review the changes in the linked comparisons
           2. Check if any changes affect:
-             - \`PVE::AccessControl\` (ticket/auth functions)
-             - \`PVE::HTTPServer::auth_handler\`
-             - \`PVE::Service::pveproxy\`
-             - \`PVE.window.LoginWindow\` (ExtJS)
+             - `PVE::AccessControl` (ticket/auth functions)
+             - `PVE::HTTPServer::auth_handler`
+             - `PVE::Service::pveproxy`
+             - `PVE.window.LoginWindow` (ExtJS)
           3. Test the plugin against updated Proxmox if needed
           4. Update COMPATIBILITY.md with test results
           5. Close this issue when validated
 
           ---
-          *This issue was automatically created by the upstream monitoring workflow.*"
+          *This issue was automatically created by the upstream monitoring workflow.*
+          ENDOFBODY
 
           if [ -n "$EXISTING" ]; then
             echo "Updating existing issue #$EXISTING"
-            gh issue comment "$EXISTING" --body "$BODY"
+            gh issue comment "$EXISTING" --body-file /tmp/issue-body.md
           else
             echo "Creating new issue"
             gh issue create \
               --title "Upstream Proxmox updates detected - validation required" \
-              --body "$BODY" \
+              --body-file /tmp/issue-body.md \
               --label "upstream-update"
           fi
