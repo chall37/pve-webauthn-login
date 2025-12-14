@@ -228,6 +228,5 @@ jobs:
 
             gh pr create \
               --title "Update upstream state tracking" \
-              --body-file /tmp/pr-body.md \
-              --label "upstream-update"
+              --body-file /tmp/pr-body.md
           fi
