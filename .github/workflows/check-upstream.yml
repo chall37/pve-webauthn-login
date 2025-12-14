@@ -102,37 +102,64 @@ jobs:
           # Check if there's already an open issue with upstream-update label
           EXISTING=$(gh issue list --label "upstream-update" --state open --json number --jq '.[0].number // empty')
 
-          # Write body to file
-          {
-            echo "## Upstream Proxmox Updates Detected"
-            echo ""
-            echo "The following upstream repositories have new commits since last acknowledged state:"
-            echo ""
-            echo "$UPDATES"
-            echo ""
-            echo "## Action Required"
-            echo ""
-            echo "1. Review the changes in the linked comparisons above"
-            echo "2. Check if any changes affect:"
-            echo "   - \`PVE::AccessControl\` (ticket/auth functions)"
-            echo "   - \`PVE::HTTPServer::auth_handler\`"
-            echo "   - \`PVE::Service::pveproxy\`"
-            echo "   - \`PVE.window.LoginWindow\` (ExtJS)"
-            echo "3. If changes affect compatibility:"
-            echo "   - Test the plugin against updated Proxmox"
-            echo "   - Update \`compatibility.json\` if a new PVE version needs to be added"
-            echo "4. Merge the associated PR to acknowledge the upstream changes"
-            echo "5. Close this issue when validated"
-            echo ""
-            echo "---"
-            echo "*Last updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
-          } > /tmp/issue-body.md
+          # Create a fingerprint of the updates to detect duplicates
+          FINGERPRINT=$(echo "$UPDATES" | md5sum | cut -d' ' -f1)
 
           if [ -n "$EXISTING" ]; then
-            echo "Updating existing issue #$EXISTING"
-            gh issue edit "$EXISTING" --body-file /tmp/issue-body.md
+            echo "Found existing issue #$EXISTING"
+
+            # Check if we already commented with this exact update
+            EXISTING_FINGERPRINT=$(gh issue view "$EXISTING" --json body,comments \
+              --jq '.body, .comments[].body' 2>/dev/null | grep -o "fingerprint:$FINGERPRINT" || true)
+
+            if [ -n "$EXISTING_FINGERPRINT" ]; then
+              echo "Updates already reported (fingerprint match), skipping comment"
+              echo "issue_number=$EXISTING" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # Add comment with new updates
+            {
+              echo "## Updated Upstream Changes"
+              echo ""
+              echo "New commits detected since last acknowledged state:"
+              echo ""
+              echo "$UPDATES"
+              echo ""
+              echo "---"
+              echo "*$(date -u '+%Y-%m-%d %H:%M:%S UTC')* <!-- fingerprint:$FINGERPRINT -->"
+            } > /tmp/comment-body.md
+
+            echo "Adding comment with new updates"
+            gh issue comment "$EXISTING" --body-file /tmp/comment-body.md
             echo "issue_number=$EXISTING" >> $GITHUB_OUTPUT
           else
+            # Create new issue with full body
+            {
+              echo "## Upstream Proxmox Updates Detected"
+              echo ""
+              echo "The following upstream repositories have new commits since last acknowledged state:"
+              echo ""
+              echo "$UPDATES"
+              echo ""
+              echo "## Action Required"
+              echo ""
+              echo "1. Review the changes in the linked comparisons above"
+              echo "2. Check if any changes affect:"
+              echo "   - \`PVE::AccessControl\` (ticket/auth functions)"
+              echo "   - \`PVE::HTTPServer::auth_handler\`"
+              echo "   - \`PVE::Service::pveproxy\`"
+              echo "   - \`PVE.window.LoginWindow\` (ExtJS)"
+              echo "3. If changes affect compatibility:"
+              echo "   - Test the plugin against updated Proxmox"
+              echo "   - Update \`compatibility.json\` if a new PVE version needs to be added"
+              echo "4. Merge the associated PR to acknowledge the upstream changes"
+              echo "5. Close this issue when validated"
+              echo ""
+              echo "---"
+              echo "*$(date -u '+%Y-%m-%d %H:%M:%S UTC')* <!-- fingerprint:$FINGERPRINT -->"
+            } > /tmp/issue-body.md
+
             echo "Creating new issue"
             ISSUE_URL=$(gh issue create \
               --title "Upstream Proxmox updates detected - validation required" \
