@@ -17,12 +17,15 @@ REPO="chall37/pve-webauthn-login"
 KEY_PATH="/usr/local/share/pve-webauthn-login/keys/pve-webauthn-login.asc"
 EXPECTED_FINGERPRINT="D408D1D8A4B730F47EE17FE7FD3723E6F0A2ABD7"
 CACHE_DIR="/var/cache/pve-webauthn-login"
+STATE_DIR="/var/lib/pve-webauthn-login"
+EOL_FILE="$STATE_DIR/eol.json"
 
 TMP_DIR=$(mktemp -d)
 trap "rm -rf $TMP_DIR" EXIT
 
-# Ensure cache directory exists
+# Ensure directories exist
 mkdir -p "$CACHE_DIR"
+mkdir -p "$STATE_DIR"
 
 log() { logger -t pve-webauthn-login "$1"; }
 
@@ -72,6 +75,23 @@ if ! gpg --verify "$TMP_DIR/compatibility.json.asc" "$TMP_DIR/compatibility.json
     log "Update BLOCKED: compatibility.json signature verification failed"
     exit 1
 fi
+
+# Check for EOL status
+EOL_MESSAGE=$(grep -o '"eol"[[:space:]]*:[[:space:]]*{[^}]*}' "$TMP_DIR/compatibility.json" 2>/dev/null | \
+    grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+
+if [ -n "$EOL_MESSAGE" ]; then
+    log "EOL: $EOL_MESSAGE"
+    # Write EOL status to file for UI to read
+    cat "$TMP_DIR/compatibility.json" | grep -o '"eol"[[:space:]]*:[[:space:]]*{[^}]*}' | \
+        sed 's/"eol"[[:space:]]*:[[:space:]]*//' > "$EOL_FILE" 2>/dev/null || \
+        echo '{"message":"This module has reached end-of-life."}' > "$EOL_FILE"
+    log "EOL status written to $EOL_FILE - please uninstall with: apt remove pve-webauthn-login"
+    exit 0
+fi
+
+# Clear EOL file if it exists but EOL is not set (in case of rollback)
+rm -f "$EOL_FILE" 2>/dev/null || true
 
 COMPAT_RELEASE=$(grep "\"$PVE_VERSION\"" "$TMP_DIR/compatibility.json" 2>/dev/null | sed 's/.*: *"\([^"]*\)".*/\1/')
 if [ -z "$COMPAT_RELEASE" ]; then

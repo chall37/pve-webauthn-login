@@ -27,6 +27,12 @@ if ($@) {
     # Continue to run vanilla pvedaemon
 }
 
+# Check for EOL status and log warning
+my $eol_file = '/var/lib/pve-webauthn-login/eol.json';
+if (-f $eol_file) {
+    syslog('warning', "pve-webauthn-login: EOL - this module is no longer maintained. Uninstall with: apt remove pve-webauthn-login");
+}
+
 # Now load and run the real pvedaemon
 use PVE::Service::pvedaemon;
 

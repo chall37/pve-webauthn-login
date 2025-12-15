@@ -14,6 +14,68 @@
     Ext.onReady(function() {
         console.log('WebAuthn Login: Ext ready, setting up...');
 
+        // EOL Banner - check for EOL status file and display warning if present
+        var checkAndShowEolBanner = function() {
+            // Check if banner already exists
+            if (Ext.get('pve-webauthn-eol-banner')) {
+                return;
+            }
+
+            // Check if user dismissed the banner this session
+            if (window.sessionStorage && window.sessionStorage.getItem('pve-webauthn-eol-dismissed')) {
+                return;
+            }
+
+            // Fetch EOL status file (only exists if EOL was detected by update script)
+            fetch('/webauthn-eol.json')
+                .then(function(response) {
+                    if (!response.ok) {
+                        // File doesn't exist = not EOL
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(function(eolData) {
+                    if (!eolData) {
+                        return;
+                    }
+
+                    var message = eolData.message || 'This module is no longer maintained.';
+
+                    Ext.DomHelper.insertFirst(document.body, {
+                        id: 'pve-webauthn-eol-banner',
+                        tag: 'div',
+                        style: 'position: fixed; top: 0; left: 0; right: 0; z-index: 100000; ' +
+                               'background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%); ' +
+                               'color: white; padding: 12px 20px; text-align: center; ' +
+                               'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; ' +
+                               'font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);',
+                        html: '<span style="margin-right: 15px;">' +
+                              '<strong>pve-webauthn-login has reached end-of-life.</strong> ' +
+                              Ext.htmlEncode(message) + ' To uninstall: ' +
+                              '<code style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 3px; font-family: monospace;">apt remove pve-webauthn-login</code>' +
+                              '</span>' +
+                              '<button id="pve-webauthn-eol-dismiss" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); ' +
+                              'color: white; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Dismiss</button>'
+                    });
+
+                    // Add dismiss handler
+                    Ext.get('pve-webauthn-eol-dismiss').on('click', function() {
+                        Ext.get('pve-webauthn-eol-banner').remove();
+                        // Remember dismissal for this session
+                        if (window.sessionStorage) {
+                            window.sessionStorage.setItem('pve-webauthn-eol-dismissed', 'true');
+                        }
+                    });
+                })
+                .catch(function() {
+                    // Silently ignore fetch errors (file doesn't exist = not EOL)
+                });
+        };
+
+        // Check for EOL status
+        checkAndShowEolBanner();
+
         // Function to add button to an existing login window
         var addButtonToWindow = function(loginWindow) {
             // Find the login button
