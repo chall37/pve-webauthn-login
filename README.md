@@ -19,7 +19,7 @@ Designed for home server environments where you want the security of authenticat
 
 ## Requirements
 
-- Proxmox VE 8.4.14 or 9.1.2 (see [COMPATIBILITY.md](COMPATIBILITY.md) for tested versions)
+- Proxmox VE 8.4.14 or 9.1.2–9.1.4 (see [COMPATIBILITY.md](COMPATIBILITY.md) for tested versions)
 - WebAuthn must be configured in Datacenter options
 - User must have a WebAuthn credential registered (via Two Factor settings)
 
