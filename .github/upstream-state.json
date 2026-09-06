@@ -1,6 +1,6 @@
 {
-  "proxmox/pve-access-control": "df0a60e74d8040f3a8f066c840a76c4b5b8aff9e",
-  "proxmox/pve-manager": "3936276e2241b07a9546747e2ff2a91b4502c429",
+  "proxmox/pve-access-control": "5ccd07d9302562b73374d331b63d25b04b86766c",
+  "proxmox/pve-manager": "2db9c2ab44c9f8ad1e81aff32695b61b9b0a227f",
   "proxmox/pve-http-server": "5c9e4ea773364bdb7ae0e2faec5750fe58129a47",
-  "proxmox/proxmox-widget-toolkit": "4e8d9031d5f036033e822d1a3d654429b4b54a4b"
+  "proxmox/proxmox-widget-toolkit": "b71b87514a4607b30c7b148d5579ae19074da5f4"
 }
